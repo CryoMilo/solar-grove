@@ -1,0 +1,17 @@
+{
+  "name": "@solar-grove/command-engine",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@solar-grove/game-types": "workspace:*",
+    "@solar-grove/infrastructure-model": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

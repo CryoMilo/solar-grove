@@ -1,0 +1,154 @@
+:root {
+  --font-display: "Outfit", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* Solarpunk Palette */
+  --bg-primary: #0a1410;
+  --bg-secondary: #11221b;
+  --bg-surface: rgba(18, 36, 29, 0.85);
+  --bg-surface-glass: rgba(18, 36, 29, 0.65);
+  --bg-card: rgba(25, 51, 41, 0.7);
+
+  --border-subtle: rgba(72, 187, 120, 0.2);
+  --border-active: rgba(72, 187, 120, 0.6);
+  --border-gold: rgba(236, 201, 75, 0.5);
+
+  --text-primary: #f0fff4;
+  --text-secondary: #9ae6b4;
+  --text-muted: #68d391;
+  --text-dim: #48bb78;
+
+  --accent-gold: #ecc94b;
+  --accent-amber: #dd6b20;
+  --accent-emerald: #38a169;
+  --accent-teal: #319795;
+  --accent-cyan: #4fd1c5;
+  --accent-danger: #e53e3e;
+  --accent-warning: #d69e2e;
+
+  --shadow-solarpunk: 0 8px 32px 0 rgba(0, 0, 0, 0.5), 0 0 15px 0 rgba(56, 161, 105, 0.2);
+  --shadow-glow: 0 0 12px rgba(72, 187, 120, 0.4);
+  --shadow-gold: 0 0 12px rgba(236, 201, 75, 0.4);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Solarpunk Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(10, 20, 16, 0.6);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(56, 161, 105, 0.4);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(72, 187, 120, 0.8);
+}
+
+/* Retro Scanline Overlay (subtle) */
+.scanlines {
+  position: relative;
+}
+.scanlines::after {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%);
+  background-size: 100% 4px;
+  z-index: 999;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* Glassmorphism Panel Utility */
+.glass-panel {
+  background: var(--bg-surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: var(--shadow-solarpunk);
+}
+
+.glass-panel-glow {
+  border: 1px solid var(--border-active);
+  box-shadow: var(--shadow-solarpunk), var(--shadow-glow);
+}
+
+/* Typography styles */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* Buttons */
+.btn-solarpunk {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid var(--border-active);
+  background: linear-gradient(135deg, rgba(56, 161, 105, 0.3) 0%, rgba(20, 45, 37, 0.6) 100%);
+  color: var(--text-primary);
+}
+
+.btn-solarpunk:hover {
+  background: linear-gradient(135deg, rgba(72, 187, 120, 0.5) 0%, rgba(28, 68, 54, 0.8) 100%);
+  box-shadow: var(--shadow-glow);
+  transform: translateY(-1px);
+}
+
+.btn-solarpunk:active {
+  transform: translateY(0);
+}
+
+.btn-gold {
+  border-color: var(--border-gold);
+  background: linear-gradient(135deg, rgba(236, 201, 75, 0.25) 0%, rgba(116, 75, 12, 0.4) 100%);
+  color: #fffaf0;
+}
+
+.btn-gold:hover {
+  background: linear-gradient(135deg, rgba(236, 201, 75, 0.45) 0%, rgba(161, 106, 18, 0.6) 100%);
+  box-shadow: var(--shadow-gold);
+}

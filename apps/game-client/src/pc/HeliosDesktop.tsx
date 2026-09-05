@@ -1,0 +1,200 @@
+import {
+  Activity,
+  BookOpen,
+  Cloud,
+  Coins,
+  Droplets,
+  HardDrive,
+  Monitor,
+  Sparkles,
+  Sun,
+  Terminal,
+  X,
+  Zap,
+} from 'lucide-react';
+import type React from 'react';
+import { useEffect } from 'react';
+import type { HeliosWindowId } from '../stores/useGameStore';
+import { useGameStore } from '../stores/useGameStore';
+import { BlueprintModal } from './BlueprintModal/BlueprintModal';
+import { CloudConsoleWindow } from './CloudConsole/CloudConsoleWindow';
+import { KnowledgeMapWindow } from './KnowledgeMap/KnowledgeMapWindow';
+import { MicroLessonDrawer } from './MicroLesson/MicroLessonDrawer';
+import { ObjectivesWindow } from './Objectives/ObjectivesWindow';
+import { ObservatoryWindow } from './Observatory/ObservatoryWindow';
+import { TerminalWindow } from './Terminal/TerminalWindow';
+
+export const HeliosDesktop: React.FC = () => {
+  const activeWindow = useGameStore((s) => s.activeWindow);
+  const setActiveWindow = useGameStore((s) => s.setActiveWindow);
+  const togglePc = useGameStore((s) => s.togglePc);
+  const activeBlueprint = useGameStore((s) => s.activeBlueprint);
+  const closeBlueprint = useGameStore((s) => s.closeBlueprint);
+  const activeMicroLesson = useGameStore((s) => s.activeMicroLesson);
+  const closeMicroLesson = useGameStore((s) => s.closeMicroLesson);
+
+  const farmState = useGameStore((s) => s.farmState);
+
+  const navItems: { id: HeliosWindowId; label: string; icon: React.ReactNode }[] = [
+    { id: 'observatory', label: 'Observatory', icon: <Activity size={16} /> },
+    { id: 'terminal', label: 'Terminal', icon: <Terminal size={16} /> },
+    { id: 'cloud', label: 'Cloud Manager', icon: <Cloud size={16} /> },
+    { id: 'objectives', label: 'Objectives', icon: <Sparkles size={16} /> },
+    { id: 'knowledge', label: 'Knowledge Map', icon: <BookOpen size={16} /> },
+  ];
+
+  return (
+    <div
+      className="scanlines"
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: '#0c1a15',
+        display: 'flex',
+        flexDirection: 'column',
+        zIndex: 1000,
+      }}
+    >
+      {/* Top Solarpunk Taskbar */}
+      <div
+        style={{
+          height: '52px',
+          backgroundColor: '#07100d',
+          borderBottom: '1px solid rgba(72, 187, 120, 0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 20px',
+          boxSizing: 'border-box',
+        }}
+      >
+        {/* Brand & Tabs */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              color: '#ecc94b',
+              fontWeight: 800,
+              fontSize: '15px',
+            }}
+          >
+            <Sun size={20} color="#ecc94b" />
+            <span>HELIOS OS</span>
+            <span
+              style={{
+                fontSize: '10px',
+                color: '#68d391',
+                background: 'rgba(56, 161, 105, 0.2)',
+                padding: '2px 6px',
+                borderRadius: '4px',
+              }}
+            >
+              SOLAR GROVE v1.0
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: '6px' }}>
+            {navItems.map((item) => {
+              const isActive = activeWindow === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveWindow(item.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: isActive ? 'rgba(56, 161, 105, 0.3)' : 'transparent',
+                    color: isActive ? '#f0fff4' : '#a0aec0',
+                    boxShadow: isActive ? 'inset 0 0 0 1px rgba(72, 187, 120, 0.5)' : 'none',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {item.icon}
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Right Telemetry & Exit */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+          {/* Farm metrics */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '13px' }}>
+            <span
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                color: '#ecc94b',
+                fontWeight: 700,
+              }}
+            >
+              <Coins size={15} /> {farmState.gold} G
+            </span>
+            <span
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                color: '#38b2ac',
+                fontWeight: 600,
+              }}
+            >
+              <Zap size={15} /> {farmState.power} kWh
+            </span>
+            <span
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                color: '#4299e1',
+                fontWeight: 600,
+              }}
+            >
+              <Droplets size={15} /> {farmState.water} L
+            </span>
+          </div>
+
+          {/* Toggle back to Farm View */}
+          <button
+            className="btn-solarpunk btn-gold"
+            onClick={() => togglePc(false)}
+            style={{ padding: '6px 14px', fontSize: '12px' }}
+          >
+            🌾 Pixel Farm View (TAB)
+          </button>
+        </div>
+      </div>
+
+      {/* Main Window Workspace */}
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        {activeWindow === 'observatory' && <ObservatoryWindow />}
+        {activeWindow === 'terminal' && <TerminalWindow />}
+        {activeWindow === 'cloud' && <CloudConsoleWindow />}
+        {activeWindow === 'objectives' && <ObjectivesWindow />}
+        {activeWindow === 'knowledge' && <KnowledgeMapWindow />}
+      </div>
+
+      {/* Active Blueprint Modal */}
+      {activeBlueprint && <BlueprintModal blueprint={activeBlueprint} onClose={closeBlueprint} />}
+
+      {/* Active Micro-Lesson Drawer */}
+      {activeMicroLesson && (
+        <MicroLessonDrawer lesson={activeMicroLesson} onClose={closeMicroLesson} />
+      )}
+    </div>
+  );
+};

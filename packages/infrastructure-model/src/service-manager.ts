@@ -114,6 +114,38 @@ export class ServiceManager {
     return { success: true, message: `Stopped ${name}.service.` };
   }
 
+  simulateCrash(name: string, reason = 'SIGTERM exit-code 143'): boolean {
+    const service = this.services.get(name);
+    if (!service || service.status !== 'running') return false;
+
+    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    service.status = 'failed';
+    service.pid = undefined;
+    service.cpu = 0;
+    service.memoryMb = 0;
+
+    service.logs.push(
+      `[${timestamp}] [systemd] ${name}.service: Main process crashed! Reason: ${reason}`
+    );
+    service.logs.push(
+      `[${timestamp}] [${name}] Error: EADDRINUSE: Address already in use :::${service.port}`
+    );
+    service.logs.push(
+      `[${timestamp}] [${name}]     at Server.setupListenHandle (node:net:1872:16)`
+    );
+    service.logs.push(`[${timestamp}] [${name}]     at Server.listen (node:net:2008:7)`);
+    service.logs.push(`[${timestamp}] [systemd] ${name}.service: Failed with result 'exit-code'.`);
+    service.logs.push(`[${timestamp}] [systemd] ${name}.service: Unit entered failed state.`);
+
+    return true;
+  }
+
+  getJournalLogs(name: string, count = 20): string[] {
+    const service = this.services.get(name);
+    if (!service) return [`-- No entries found for unit ${name}.service --`];
+    return service.logs.slice(-count);
+  }
+
   restartService(name: string): { success: boolean; message: string; pid?: number } {
     this.stopService(name);
     return this.startService(name);

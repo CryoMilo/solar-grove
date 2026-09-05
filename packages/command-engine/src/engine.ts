@@ -443,6 +443,43 @@ export class CommandEngine {
       return { stdout: lines.join('\r\n'), exitCode: 0 };
     });
 
+    // JOURNALCTL
+    this.register('journalctl', (args, sm) => {
+      let unitName = 'irrigation-controller';
+      let linesCount = 20;
+
+      for (let i = 0; i < args.length; i++) {
+        if (args[i] === '-u' && args[i + 1]) {
+          unitName = args[i + 1].replace(/\.service$/, '');
+        }
+        if ((args[i] === '-n' || args[i] === '--lines') && args[i + 1]) {
+          linesCount = Number.parseInt(args[i + 1], 10) || 20;
+        }
+      }
+
+      const logs = sm.getJournalLogs(unitName, linesCount);
+      const lines = [
+        `-- Logs begin at ${new Date(Date.now() - 3600000).toUTCString()}, end at ${new Date().toUTCString()}. --`,
+        ...logs,
+        '',
+      ];
+      return {
+        stdout: lines.join('\r\n'),
+        exitCode: 0,
+        unlockedCompetency: 'linux.services',
+      };
+    });
+
+    // FUSER
+    this.register('fuser', (args) => {
+      const portArg = args[0] || '3000/tcp';
+      return {
+        stdout: `${portArg}:  1042\r\n`,
+        exitCode: 0,
+        unlockedCompetency: 'networking.ports',
+      };
+    });
+
     // CLEAR
     this.register('clear', () => {
       return { stdout: '\x1b[2J\x1b[3J\x1b[H', exitCode: 0 };

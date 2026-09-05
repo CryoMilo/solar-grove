@@ -6,7 +6,10 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload() {
-    // Generate 3D 64-bit pixel isometric textures (Smurf's Village bird's-eye style)
+    // 1. Preload AI-generated panoramic Solarpunk landscape background
+    this.load.image('solarpunk_bg', '/assets/solarpunk_grove_bg.jpg');
+
+    // 2. Generate 3D 64-bit pixel isometric textures
     this.createIsometricGrassTile();
     this.createIsometricSoilTile();
     this.createIsometricPathTile();
@@ -14,18 +17,13 @@ export class BootScene extends Phaser.Scene {
     this.createIsometricBuildingTextures();
     this.createIsometricCursors();
     this.createStatusBadges();
+    this.createIncidentAlarmTextures();
   }
 
   create() {
     this.scene.start('FarmScene');
   }
 
-  /**
-   * Helper to draw standard 2:1 isometric diamond top face with 3D height extrusion.
-   * Diamond top: (32, 0) -> (64, 16) -> (32, 32) -> (0, 16)
-   * Left side: (0, 16) -> (32, 32) -> (32, 32 + height) -> (0, 16 + height)
-   * Right side: (32, 32) -> (64, 16) -> (64, 16 + height) -> (32, 32 + height)
-   */
   private drawIsometricBlock(
     ctx: CanvasRenderingContext2D,
     topColor: string,
@@ -33,7 +31,7 @@ export class BootScene extends Phaser.Scene {
     rightColor: string,
     height = 8
   ) {
-    // Left side facet (shadowed)
+    // Left side facet (shadowed cliff)
     ctx.fillStyle = leftColor;
     ctx.beginPath();
     ctx.moveTo(0, 16);
@@ -43,7 +41,7 @@ export class BootScene extends Phaser.Scene {
     ctx.closePath();
     ctx.fill();
 
-    // Right side facet (medium shadow)
+    // Right side facet (medium shadow cliff)
     ctx.fillStyle = rightColor;
     ctx.beginPath();
     ctx.moveTo(32, 32);
@@ -71,24 +69,30 @@ export class BootScene extends Phaser.Scene {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    this.drawIsometricBlock(ctx, '#2f855a', '#1c4532', '#22543d', 8);
+    // Lush mossy loam cliff
+    this.drawIsometricBlock(ctx, '#276749', '#143324', '#1b4330', 9);
 
-    // Pixel grass textures & subtle solarpunk details
-    ctx.fillStyle = '#38a169';
-    // Grass tufts inside diamond
-    ctx.fillRect(28, 12, 2, 4);
-    ctx.fillRect(36, 14, 2, 3);
-    ctx.fillRect(20, 18, 3, 2);
-    ctx.fillRect(44, 18, 2, 3);
-    ctx.fillRect(32, 22, 2, 3);
+    // Fine pixel blades and meadow texture
+    ctx.fillStyle = '#2f855a';
+    ctx.fillRect(26, 10, 3, 5);
+    ctx.fillRect(38, 12, 2, 4);
+    ctx.fillRect(18, 16, 4, 3);
+    ctx.fillRect(44, 18, 3, 3);
+    ctx.fillRect(30, 22, 3, 4);
 
-    // Subtle highlighted flowers / clover
+    // Bright spring clovers
+    ctx.fillStyle = '#48bb78';
+    ctx.fillRect(32, 8, 2, 2);
+    ctx.fillRect(22, 14, 2, 2);
+    ctx.fillRect(40, 20, 2, 2);
+
+    // Solarpunk golden dandelion flowers
     ctx.fillStyle = '#ecc94b';
-    ctx.fillRect(24, 10, 2, 2);
-    ctx.fillRect(40, 24, 2, 2);
+    ctx.fillRect(24, 18, 2, 2);
+    ctx.fillRect(42, 12, 2, 2);
 
-    // Top rim highlight for crisp 3D pop
-    ctx.strokeStyle = 'rgba(154, 230, 180, 0.4)';
+    // Soft top-edge sunlit highlight
+    ctx.strokeStyle = 'rgba(154, 230, 180, 0.45)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(32, 0);
@@ -108,33 +112,36 @@ export class BootScene extends Phaser.Scene {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Dark fertile humus with extruded soil layers
-    this.drawIsometricBlock(ctx, '#3d2817', '#24170d', '#2c1c10', 8);
+    // Dark fertile rich terracotta loam
+    this.drawIsometricBlock(ctx, '#402613', '#23140a', '#2d1b0e', 9);
 
-    // 3D Furrows across isometric orientation
-    ctx.strokeStyle = '#28180c';
-    ctx.lineWidth = 2;
-    // Row 1
+    // 3D Furrows across isometric orientation with moisture depth
+    ctx.strokeStyle = '#271509';
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
     ctx.moveTo(16, 8);
     ctx.lineTo(48, 24);
-    ctx.stroke();
-    // Row 2
-    ctx.beginPath();
     ctx.moveTo(24, 4);
     ctx.lineTo(56, 20);
-    ctx.stroke();
-    // Row 3
-    ctx.beginPath();
     ctx.moveTo(8, 12);
     ctx.lineTo(40, 28);
     ctx.stroke();
 
-    // Soil moisture flecks
-    ctx.fillStyle = '#543820';
-    ctx.fillRect(30, 14, 2, 2);
-    ctx.fillRect(42, 10, 2, 2);
-    ctx.fillRect(22, 20, 2, 2);
+    // Raised moist ridges
+    ctx.strokeStyle = '#5a381c';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(17, 7);
+    ctx.lineTo(49, 23);
+    ctx.moveTo(25, 3);
+    ctx.lineTo(57, 19);
+    ctx.stroke();
+
+    // Humus compost flecks
+    ctx.fillStyle = '#654020';
+    ctx.fillRect(30, 13, 2, 2);
+    ctx.fillRect(42, 9, 2, 2);
+    ctx.fillRect(20, 19, 2, 2);
 
     this.textures.addCanvas('iso_soil', canvas);
   }
@@ -146,10 +153,10 @@ export class BootScene extends Phaser.Scene {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Slate stone block
-    this.drawIsometricBlock(ctx, '#4a5568', '#2d3748', '#374151', 8);
+    // Aged slate stone block
+    this.drawIsometricBlock(ctx, '#4a5568', '#252d3a', '#323c4e', 9);
 
-    // Flagstone cracks
+    // Cobblestone paver divisions
     ctx.strokeStyle = '#2d3748';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -159,7 +166,12 @@ export class BootScene extends Phaser.Scene {
     ctx.lineTo(48, 24);
     ctx.stroke();
 
-    // Embedded glowing cyan energy strip
+    // Moss on stone cracks
+    ctx.fillStyle = '#2f855a';
+    ctx.fillRect(31, 14, 2, 3);
+    ctx.fillRect(20, 10, 3, 2);
+
+    // Embedded glowing cyan energy conduit trace
     ctx.strokeStyle = '#38b2ac';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -193,39 +205,34 @@ export class BootScene extends Phaser.Scene {
       this.textures.addCanvas('iso_crop_sunroot_seed', cSeed);
     }
 
-    // 2. Sprout (3D dual leaves rising)
+    // 2. Sprout
     const cSprout = document.createElement('canvas');
     cSprout.width = 64;
     cSprout.height = 48;
     const ctxSprout = cSprout.getContext('2d');
     if (ctxSprout) {
-      // Stalk
       ctxSprout.fillStyle = '#276749';
       ctxSprout.fillRect(31, 14, 2, 10);
-      // Left leaf
       ctxSprout.fillStyle = '#48bb78';
       ctxSprout.beginPath();
       ctxSprout.ellipse(27, 13, 5, 3, -Math.PI / 4, 0, Math.PI * 2);
       ctxSprout.fill();
-      // Right leaf
       ctxSprout.beginPath();
       ctxSprout.ellipse(37, 13, 5, 3, Math.PI / 4, 0, Math.PI * 2);
       ctxSprout.fill();
       this.textures.addCanvas('iso_crop_sunroot_sprout', cSprout);
     }
 
-    // 3. Growing (Bushy foliage & swelling golden root)
+    // 3. Growing
     const cGrowing = document.createElement('canvas');
     cGrowing.width = 64;
     cGrowing.height = 54;
     const ctxGrowing = cGrowing.getContext('2d');
     if (ctxGrowing) {
-      // Golden root bulb
       ctxGrowing.fillStyle = '#d69e2e';
       ctxGrowing.beginPath();
       ctxGrowing.arc(32, 24, 6, 0, Math.PI * 2);
       ctxGrowing.fill();
-      // Lush leaves
       ctxGrowing.fillStyle = '#38a169';
       ctxGrowing.beginPath();
       ctxGrowing.ellipse(24, 16, 8, 5, -0.6, 0, Math.PI * 2);
@@ -240,19 +247,17 @@ export class BootScene extends Phaser.Scene {
       this.textures.addCanvas('iso_crop_sunroot_growing', cGrowing);
     }
 
-    // 4. Mature (Tall Radiant Golden Sunroot with Solar Energy Aura)
+    // 4. Mature (Tall Radiant Golden Sunroot)
     const cMature = document.createElement('canvas');
     cMature.width = 64;
     cMature.height = 64;
     const ctxMature = cMature.getContext('2d');
     if (ctxMature) {
-      // Ground shadow
-      ctxMature.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      ctxMature.fillStyle = 'rgba(0, 0, 0, 0.35)';
       ctxMature.beginPath();
       ctxMature.ellipse(32, 38, 16, 8, 0, 0, Math.PI * 2);
       ctxMature.fill();
 
-      // Golden Sunroot body
       ctxMature.fillStyle = '#d69e2e';
       ctxMature.beginPath();
       ctxMature.arc(32, 26, 10, 0, Math.PI * 2);
@@ -263,11 +268,9 @@ export class BootScene extends Phaser.Scene {
       ctxMature.arc(32, 24, 8, 0, Math.PI * 2);
       ctxMature.fill();
 
-      // Highlight glint
       ctxMature.fillStyle = '#fffaf0';
       ctxMature.fillRect(30, 20, 3, 3);
 
-      // Solar leaves
       ctxMature.fillStyle = '#38a169';
       ctxMature.beginPath();
       ctxMature.ellipse(20, 16, 10, 6, -0.7, 0, Math.PI * 2);
@@ -280,7 +283,6 @@ export class BootScene extends Phaser.Scene {
       ctxMature.ellipse(32, 8, 7, 10, 0, 0, Math.PI * 2);
       ctxMature.fill();
 
-      // Glowing solar energy sparkles
       ctxMature.fillStyle = '#ffffff';
       ctxMature.fillRect(20, 6, 2, 2);
       ctxMature.fillRect(44, 8, 2, 2);
@@ -291,34 +293,29 @@ export class BootScene extends Phaser.Scene {
   }
 
   private createIsometricBuildingTextures() {
-    // 1. Helio Pump (64×80 canvas) — 3D Smurf Village style pump
+    // 1. Helio Pump (64×80 canvas)
     const cPump = document.createElement('canvas');
     cPump.width = 64;
     cPump.height = 80;
     const ctxPump = cPump.getContext('2d');
     if (ctxPump) {
-      // Ground Shadow
       ctxPump.fillStyle = 'rgba(0, 0, 0, 0.35)';
       ctxPump.beginPath();
       ctxPump.ellipse(32, 54, 28, 14, 0, 0, Math.PI * 2);
       ctxPump.fill();
 
-      // Stone & Bronze Foundation
       ctxPump.fillStyle = '#2d3748';
       ctxPump.fillRect(16, 44, 32, 14);
       ctxPump.fillStyle = '#4a5568';
       ctxPump.fillRect(14, 42, 36, 4);
 
-      // Cylindrical Cistern
       ctxPump.fillStyle = '#2c7a7b';
       ctxPump.fillRect(20, 26, 24, 18);
-      // Water level window (glass tube)
       ctxPump.fillStyle = '#319795';
       ctxPump.fillRect(28, 28, 8, 14);
       ctxPump.fillStyle = '#63b3ed';
       ctxPump.fillRect(29, 32, 6, 8);
 
-      // Brass Piston & Gear arm
       ctxPump.fillStyle = '#d69e2e';
       ctxPump.fillRect(12, 32, 8, 16);
       ctxPump.fillStyle = '#b7791f';
@@ -326,13 +323,11 @@ export class BootScene extends Phaser.Scene {
       ctxPump.arc(16, 32, 5, 0, Math.PI * 2);
       ctxPump.fill();
 
-      // Water Pipe leading forward
       ctxPump.fillStyle = '#4299e1';
       ctxPump.fillRect(40, 40, 18, 6);
       ctxPump.fillStyle = '#63b3ed';
       ctxPump.fillRect(52, 44, 6, 8);
 
-      // Angled Photovoltaic Solar Panel Top
       ctxPump.fillStyle = '#1a365d';
       ctxPump.beginPath();
       ctxPump.moveTo(32, 4);
@@ -346,7 +341,6 @@ export class BootScene extends Phaser.Scene {
       ctxPump.lineWidth = 1;
       ctxPump.stroke();
 
-      // Solar grid cell divisions
       ctxPump.beginPath();
       ctxPump.moveTo(32, 4);
       ctxPump.lineTo(32, 24);
@@ -354,36 +348,31 @@ export class BootScene extends Phaser.Scene {
       ctxPump.lineTo(45, 20);
       ctxPump.stroke();
 
-      // Solar specular glint
       ctxPump.fillStyle = '#ffffff';
       ctxPump.fillRect(30, 8, 3, 2);
 
       this.textures.addCanvas('iso_building_helio_pump', cPump);
     }
 
-    // 2. Verdant Glasshouse (96×100 canvas) — 3D Botanical Conservatory
+    // 2. Verdant Glasshouse (96×100 canvas)
     const cGh = document.createElement('canvas');
     cGh.width = 96;
     cGh.height = 100;
     const ctxGh = cGh.getContext('2d');
     if (ctxGh) {
-      // Ground Shadow
       ctxGh.fillStyle = 'rgba(0, 0, 0, 0.4)';
       ctxGh.beginPath();
       ctxGh.ellipse(48, 70, 44, 20, 0, 0, Math.PI * 2);
       ctxGh.fill();
 
-      // Earthen Brick Base
       ctxGh.fillStyle = '#744210';
       ctxGh.fillRect(18, 54, 60, 18);
       ctxGh.fillStyle = '#975a16';
       ctxGh.fillRect(16, 52, 64, 4);
 
-      // Translucent Glass Conservatory Walls
       ctxGh.fillStyle = 'rgba(79, 209, 197, 0.35)';
       ctxGh.fillRect(20, 24, 56, 30);
 
-      // Visible glowing greenhouse plants inside
       ctxGh.fillStyle = '#2f855a';
       ctxGh.beginPath();
       ctxGh.ellipse(32, 42, 8, 12, -0.3, 0, Math.PI * 2);
@@ -395,7 +384,6 @@ export class BootScene extends Phaser.Scene {
       ctxGh.fillStyle = '#ecc94b';
       ctxGh.fillRect(46, 36, 4, 8);
 
-      // Triangular 3D Glass Prism Roof
       ctxGh.fillStyle = 'rgba(129, 230, 217, 0.5)';
       ctxGh.beginPath();
       ctxGh.moveTo(48, 6);
@@ -405,18 +393,15 @@ export class BootScene extends Phaser.Scene {
       ctxGh.closePath();
       ctxGh.fill();
 
-      // Bronze/Brass Architecture Framework
       ctxGh.strokeStyle = '#ecc94b';
       ctxGh.lineWidth = 2;
       ctxGh.beginPath();
-      // Corner pillars
       ctxGh.moveTo(20, 24);
       ctxGh.lineTo(20, 54);
       ctxGh.moveTo(76, 24);
       ctxGh.lineTo(76, 54);
       ctxGh.moveTo(48, 34);
       ctxGh.lineTo(48, 54);
-      // Roof ribs
       ctxGh.moveTo(48, 6);
       ctxGh.lineTo(20, 24);
       ctxGh.moveTo(48, 6);
@@ -425,7 +410,6 @@ export class BootScene extends Phaser.Scene {
       ctxGh.lineTo(48, 34);
       ctxGh.stroke();
 
-      // Rooftop Aeration Cupola
       ctxGh.fillStyle = '#d69e2e';
       ctxGh.fillRect(44, 2, 8, 6);
       ctxGh.fillStyle = '#f6ad55';
@@ -438,7 +422,6 @@ export class BootScene extends Phaser.Scene {
   }
 
   private createIsometricCursors() {
-    // 1. Valid Isometric Placement Cursor (64×32 diamond)
     const cValid = document.createElement('canvas');
     cValid.width = 64;
     cValid.height = 32;
@@ -459,7 +442,6 @@ export class BootScene extends Phaser.Scene {
       this.textures.addCanvas('iso_cursor_valid', cValid);
     }
 
-    // 2. Invalid Isometric Placement Cursor
     const cInvalid = document.createElement('canvas');
     cInvalid.width = 64;
     cInvalid.height = 32;
@@ -480,7 +462,6 @@ export class BootScene extends Phaser.Scene {
       this.textures.addCanvas('iso_cursor_invalid', cInvalid);
     }
 
-    // 3. Water Particle Droplet (4x4)
     const cDrop = document.createElement('canvas');
     cDrop.width = 6;
     cDrop.height = 6;
@@ -495,7 +476,6 @@ export class BootScene extends Phaser.Scene {
   }
 
   private createStatusBadges() {
-    // Healthy (Green badge)
     const cOk = document.createElement('canvas');
     cOk.width = 20;
     cOk.height = 20;
@@ -514,7 +494,6 @@ export class BootScene extends Phaser.Scene {
       this.textures.addCanvas('status_healthy', cOk);
     }
 
-    // Offline / Degraded (Red badge)
     const cErr = document.createElement('canvas');
     cErr.width = 20;
     cErr.height = 20;
@@ -531,6 +510,38 @@ export class BootScene extends Phaser.Scene {
       ctxErr.fillRect(9, 5, 2, 6);
       ctxErr.fillRect(9, 13, 2, 2);
       this.textures.addCanvas('status_offline', cErr);
+    }
+  }
+
+  private createIncidentAlarmTextures() {
+    // 3D Animated Flashing Siren / Alarm Beacon (28x28)
+    const cAlarm = document.createElement('canvas');
+    cAlarm.width = 28;
+    cAlarm.height = 28;
+    const ctx = cAlarm.getContext('2d');
+    if (ctx) {
+      // Outer warning halo
+      ctx.fillStyle = 'rgba(229, 62, 62, 0.4)';
+      ctx.beginPath();
+      ctx.arc(14, 14, 13, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Flashing red siren housing
+      ctx.fillStyle = '#e53e3e';
+      ctx.beginPath();
+      ctx.arc(14, 14, 9, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#fffaf0';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Exclamation mark (!)
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(13, 8, 2, 7);
+      ctx.fillRect(13, 17, 2, 2.5);
+
+      this.textures.addCanvas('iso_alarm_beacon', cAlarm);
     }
   }
 }

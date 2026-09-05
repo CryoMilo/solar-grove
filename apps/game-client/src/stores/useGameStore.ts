@@ -9,6 +9,8 @@ import type {
   CropStage,
   CropType,
   FarmState,
+  Incident,
+  IncidentType,
   MicroLesson,
   PlayerKnowledgeMap,
   ProgressionObjective,
@@ -34,6 +36,7 @@ interface GameStore {
   buildings: BuildingInstance[];
   objectives: ProgressionObjective[];
   knowledgeMap: PlayerKnowledgeMap;
+  activeIncidents: Incident[];
   pcOpen: boolean;
   activeWindow: HeliosWindowId;
   activeBlueprint: BuildingBlueprint | null;
@@ -62,6 +65,8 @@ interface GameStore {
   ) => { success: boolean; message: string };
   runTerminalCommand: (cmd: string) => Promise<string>;
   learnCompetency: (id: CompetencyId) => void;
+  triggerIncident: (type?: IncidentType) => void;
+  resolveIncident: (id: string) => void;
 }
 
 const initialServiceManager = new ServiceManager();
@@ -147,6 +152,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   buildings: [],
   objectives: JSON.parse(JSON.stringify(OBJECTIVES)),
   knowledgeMap: initialKnowledge,
+  activeIncidents: [],
   pcOpen: false,
   activeWindow: 'observatory',
   activeBlueprint: null,
@@ -285,7 +291,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   constructBuilding: (type, x, y) => {
-    const { farmState, buildings, objectives } = get();
+    const { farmState, buildings, objectives, serviceManager } = get();
     const blueprint = BUILDINGS[type];
     if (!blueprint) {
       return { success: false, message: 'Invalid building blueprint.' };
@@ -298,6 +304,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       };
     }
 
+    const s = serviceManager.getService('irrigation-controller');
+    const isHealthy = type === 'helio-pump' && s?.status === 'running';
+
     const newBuilding: BuildingInstance = {
       id: `bld-${Date.now().toString(36)}`,
       type,
@@ -305,7 +314,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       y,
       width: 2,
       height: 2,
-      status: 'offline', // Starts offline until controller is deployed/started!
+      status: isHealthy ? 'healthy' : 'offline',
       productionRate: blueprint.productionModifier || 1.0,
       powerConsumption: blueprint.powerConsumption,
       maintenanceCost: 1,
@@ -344,24 +353,94 @@ export const useGameStore = create<GameStore>((set, get) => ({
     };
   },
 
+  triggerIncident: (type = 'process-crash') => {
+    const { incidentEngine, serviceManager, buildings } = get();
+    const targetBuilding = buildings.find((b) => b.type === 'helio-pump') || buildings[0];
+    const buildingId = targetBuilding ? targetBuilding.id : 'bld-helio-pump-1';
+    const serviceName = 'irrigation-controller';
+
+    serviceManager.simulateCrash(serviceName);
+    incidentEngine.triggerIncident(type, buildingId, serviceName);
+
+    const updatedBuildings = buildings.map((b) => {
+      if (b.id === buildingId || b.type === 'helio-pump') {
+        return { ...b, status: 'failed' as const };
+      }
+      return b;
+    });
+
+    set({
+      activeIncidents: incidentEngine.getActiveIncidents(),
+      buildings: updatedBuildings,
+    });
+  },
+
+  resolveIncident: (id) => {
+    const { incidentEngine, serviceManager, buildings, farmState } = get();
+    const inc = incidentEngine.getAllIncidents().find((i) => i.id === id);
+    if (!inc) return;
+
+    incidentEngine.resolveIncident(id);
+    serviceManager.startService(inc.affectedServiceName);
+
+    const updatedBuildings = buildings.map((b) => {
+      if (
+        b.id === inc.affectedBuildingId ||
+        (inc.affectedServiceName === 'irrigation-controller' && b.type === 'helio-pump')
+      ) {
+        return { ...b, status: 'healthy' as const };
+      }
+      return b;
+    });
+
+    set({
+      farmState: { ...farmState, gold: farmState.gold + 100 },
+      activeIncidents: incidentEngine.getActiveIncidents(),
+      buildings: updatedBuildings,
+    });
+  },
+
   runTerminalCommand: async (cmd) => {
-    const { commandEngine, learnCompetency, serviceManager, buildings, objectives } = get();
+    const {
+      commandEngine,
+      learnCompetency,
+      serviceManager,
+      incidentEngine,
+      buildings,
+      objectives,
+    } = get();
     const result = await commandEngine.execute(cmd);
 
     if (result.unlockedCompetency) {
       learnCompetency(result.unlockedCompetency);
     }
 
-    // Sync buildings status with service manager
+    let extraOutput = '';
+
+    // Check if command resolved any incidents
     if (result.affectedService) {
+      const s = serviceManager.getService(result.affectedService);
+      if (s?.status === 'running') {
+        const resolved = incidentEngine.resolveIncidentsForService(result.affectedService);
+        if (resolved.length > 0) {
+          const bounty = resolved.length * 100;
+          extraOutput += `\n\x1b[38;2;72;187;120m[EMERGENCY TELEMETRY RESTORED]\x1b[0m ${result.affectedService} operational! Active incidents remediated.\n\x1b[38;2;236;201;75m[TRIAGE BOUNTY GRANTED]\x1b[0m +${bounty} Gold credited to farm reserve.\n`;
+          set({
+            farmState: { ...get().farmState, gold: get().farmState.gold + bounty },
+            activeIncidents: incidentEngine.getActiveIncidents(),
+          });
+        }
+      }
+
+      // Sync buildings status with service manager
       const updatedBuildings = buildings.map((b) => {
         if (b.type === 'helio-pump' && result.affectedService === 'irrigation-controller') {
-          const s = serviceManager.getService('irrigation-controller');
-          b.status = s?.status === 'running' ? 'healthy' : 'offline';
+          const svc = serviceManager.getService('irrigation-controller');
+          b.status = svc?.status === 'running' ? 'healthy' : 'failed';
         }
         if (b.type === 'verdant-glasshouse' && result.affectedService === 'greenhouse-api') {
-          const s = serviceManager.getService('greenhouse-api');
-          b.status = s?.status === 'running' ? 'healthy' : 'offline';
+          const svc = serviceManager.getService('greenhouse-api');
+          b.status = svc?.status === 'running' ? 'healthy' : 'failed';
         }
         return b;
       });
@@ -374,8 +453,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             req.type === 'service-online' &&
             req.targetServiceName === result.affectedService
           ) {
-            const s = serviceManager.getService(result.affectedService);
-            if (s?.status === 'running') {
+            const svc = serviceManager.getService(result.affectedService);
+            if (svc?.status === 'running') {
               req.current = 1;
               req.satisfied = true;
             }
@@ -392,7 +471,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set({ buildings: updatedBuildings, objectives: updatedObjectives });
     }
 
-    return result.stdout;
+    return result.stdout + extraOutput;
   },
 
   tick: () => {
@@ -403,11 +482,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     for (const b of buildings) {
       if (b.type === 'helio-pump') {
         const s = serviceManager.getService('irrigation-controller');
-        if (s?.status === 'running') {
+        if (s?.status === 'running' && b.status !== 'failed') {
           b.status = 'healthy';
           waterGen += 3;
-        } else {
-          b.status = 'offline';
+        } else if (s?.status !== 'running') {
+          b.status = 'failed';
         }
       }
     }

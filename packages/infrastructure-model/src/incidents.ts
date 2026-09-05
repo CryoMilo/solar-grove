@@ -112,6 +112,18 @@ export class IncidentEngine {
     return false;
   }
 
+  resolveIncidentsForService(serviceName: string): Incident[] {
+    const resolved: Incident[] = [];
+    for (const inc of this.activeIncidents.values()) {
+      if (!inc.resolved && inc.affectedServiceName === serviceName) {
+        inc.resolved = true;
+        inc.resolvedAt = Date.now();
+        resolved.push(inc);
+      }
+    }
+    return resolved;
+  }
+
   getActiveIncidents(): Incident[] {
     return Array.from(this.activeIncidents.values()).filter((i) => !i.resolved);
   }

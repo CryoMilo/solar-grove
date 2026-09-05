@@ -32,6 +32,7 @@ export const HeliosDesktop: React.FC = () => {
   const closeBlueprint = useGameStore((s) => s.closeBlueprint);
   const activeMicroLesson = useGameStore((s) => s.activeMicroLesson);
   const closeMicroLesson = useGameStore((s) => s.closeMicroLesson);
+  const activeIncidents = useGameStore((s) => s.activeIncidents);
 
   const farmState = useGameStore((s) => s.farmState);
 
@@ -119,10 +120,26 @@ export const HeliosDesktop: React.FC = () => {
                     color: isActive ? '#f0fff4' : '#a0aec0',
                     boxShadow: isActive ? 'inset 0 0 0 1px rgba(72, 187, 120, 0.5)' : 'none',
                     transition: 'all 0.15s ease',
+                    position: 'relative',
                   }}
                 >
                   {item.icon}
                   {item.label}
+                  {item.id === 'terminal' && activeIncidents.length > 0 && (
+                    <span
+                      style={{
+                        backgroundColor: '#e53e3e',
+                        color: '#fff',
+                        fontSize: '10px',
+                        padding: '1px 5px',
+                        borderRadius: '999px',
+                        fontWeight: 800,
+                        animation: 'pulse 1.2s infinite',
+                      }}
+                    >
+                      {activeIncidents.length}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -178,6 +195,51 @@ export const HeliosDesktop: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Active Incident Warning Ribbon */}
+      {activeIncidents.length > 0 && (
+        <div
+          style={{
+            backgroundColor: '#4a1515',
+            borderBottom: '1px solid #e53e3e',
+            color: '#fed7d7',
+            padding: '7px 20px',
+            fontSize: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            zIndex: 999,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ color: '#fc8181', fontWeight: 800 }}>⚠️ INCIDENT ACTIVE:</span>
+            <span>
+              {activeIncidents[0].title} — {activeIncidents[0].description}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ color: '#fbd38d', fontFamily: 'monospace' }}>
+              Hint: {activeIncidents[0].suggestedCommand}
+            </span>
+            {activeWindow !== 'terminal' && (
+              <button
+                type="button"
+                className="btn-solarpunk"
+                onClick={() => setActiveWindow('terminal')}
+                style={{
+                  padding: '3px 10px',
+                  fontSize: '11px',
+                  background: '#c53030',
+                  color: '#fff',
+                  borderColor: '#feb2b2',
+                }}
+              >
+                Open Terminal
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Main Window Workspace */}
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>

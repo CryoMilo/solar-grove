@@ -27,6 +27,7 @@ export class FarmScene extends Phaser.Scene {
     {
       sprite: Phaser.GameObjects.Sprite;
       badge: Phaser.GameObjects.Sprite;
+      alarmBeacon?: Phaser.GameObjects.Sprite;
       gx: number;
       gy: number;
     }
@@ -42,11 +43,18 @@ export class FarmScene extends Phaser.Scene {
   }
 
   create() {
+    // 0. Panoramic Solarpunk Grove Backdrop (Blends farm into living ecosystem)
+    const centerPos = this.gridToIso(20, 20);
+    const bg = this.add.image(centerPos.x, centerPos.y, 'solarpunk_bg');
+    bg.setOrigin(0.5, 0.5);
+    bg.setDisplaySize(4200, 2400);
+    bg.setDepth(-1000);
+    bg.setAlpha(0.85);
+
     // 1. Build 3D Isometric Farm Grid
     this.createIsometricGrid();
 
     // 2. Center Camera initially over the Grove
-    const centerPos = this.gridToIso(20, 20);
     this.cameras.main.centerOn(centerPos.x, centerPos.y);
     this.cameras.main.setZoom(1.15);
 
@@ -198,7 +206,7 @@ export class FarmScene extends Phaser.Scene {
     // 2. Mouse Wheel Zooming
     this.input.on(
       'wheel',
-      (pointer: Phaser.Input.Pointer, gameObjects: unknown, deltaX: number, deltaY: number) => {
+      (_pointer: Phaser.Input.Pointer, _gameObjects: unknown, _deltaX: number, deltaY: number) => {
         const currentZoom = this.cameras.main.zoom;
         const zoomFactor = deltaY > 0 ? 0.9 : 1.1;
         const newZoom = Phaser.Math.Clamp(currentZoom * zoomFactor, 0.65, 2.2);
@@ -326,6 +334,7 @@ export class FarmScene extends Phaser.Scene {
       if (!currentBldIds.has(id)) {
         obj.sprite.destroy();
         obj.badge.destroy();
+        if (obj.alarmBeacon) obj.alarmBeacon.destroy();
         this.buildingObjects.delete(id);
       }
     }
@@ -335,7 +344,7 @@ export class FarmScene extends Phaser.Scene {
       if (b.type === 'verdant-glasshouse') texture = 'iso_building_verdant_glasshouse';
 
       const isoPos = this.gridToIso(b.x, b.y);
-      const obj = this.buildingObjects.get(b.id);
+      let obj = this.buildingObjects.get(b.id);
 
       if (!obj) {
         const sprite = this.add.sprite(isoPos.x, isoPos.y, texture);
@@ -346,10 +355,35 @@ export class FarmScene extends Phaser.Scene {
         const badge = this.add.sprite(isoPos.x + 20, isoPos.y - 36, badgeTexture);
         badge.setDepth((b.x + b.y) * 10 + 9);
 
-        this.buildingObjects.set(b.id, { sprite, badge, gx: b.x, gy: b.y });
+        obj = { sprite, badge, gx: b.x, gy: b.y };
+        this.buildingObjects.set(b.id, obj);
       } else {
         const badgeTexture = b.status === 'healthy' ? 'status_healthy' : 'status_offline';
         obj.badge.setTexture(badgeTexture);
+      }
+
+      // Solarpunk Flashing Alarm Beacon for Degraded or Failed status
+      if (b.status === 'failed' || b.status === 'degraded') {
+        if (!obj.alarmBeacon) {
+          const beacon = this.add.sprite(isoPos.x, isoPos.y - 48, 'iso_alarm_beacon');
+          beacon.setOrigin(0.5, 0.5);
+          beacon.setDepth((b.x + b.y) * 10 + 12);
+          this.tweens.add({
+            targets: beacon,
+            scaleX: 1.35,
+            scaleY: 1.35,
+            alpha: 0.5,
+            yoyo: true,
+            repeat: -1,
+            duration: 450,
+          });
+          obj.alarmBeacon = beacon;
+        }
+      } else {
+        if (obj.alarmBeacon) {
+          obj.alarmBeacon.destroy();
+          obj.alarmBeacon = undefined;
+        }
       }
     }
   }
@@ -360,7 +394,7 @@ export class FarmScene extends Phaser.Scene {
     if (service?.status !== 'running') return;
 
     for (const b of store.buildings) {
-      if (b.type === 'helio-pump') {
+      if (b.type === 'helio-pump' && b.status === 'healthy') {
         const isoPos = this.gridToIso(b.x, b.y);
 
         // Spawn a subtle sparkling water droplet

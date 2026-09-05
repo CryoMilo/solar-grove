@@ -32,6 +32,9 @@ export const App: React.FC = () => {
   const closeBlueprint = useGameStore((s) => s.closeBlueprint);
   const activeMicroLesson = useGameStore((s) => s.activeMicroLesson);
   const closeMicroLesson = useGameStore((s) => s.closeMicroLesson);
+  const activeIncidents = useGameStore((s) => s.activeIncidents);
+  const triggerIncident = useGameStore((s) => s.triggerIncident);
+  const setActiveWindow = useGameStore((s) => s.setActiveWindow);
 
   const placementMode = useGameStore((s) => s.placementMode);
   const startPlacement = useGameStore((s) => s.startPlacement);
@@ -72,20 +75,25 @@ export const App: React.FC = () => {
       {/* Farm HUD Overlays (Visible when PC is closed) */}
       {!pcOpen && (
         <>
-          {/* Top Left: Farm Treasury & Resources */}
+          {/* Top Left: Farm Treasury & Resources with Fantasy Solarpunk Brass Frame */}
           <div
-            className="glass-panel"
+            className="glass-panel frame-solarpunk"
             style={{
               position: 'absolute',
               top: '16px',
               left: '16px',
-              padding: '12px 18px',
+              padding: '12px 20px',
               display: 'flex',
               alignItems: 'center',
               gap: '18px',
               zIndex: 100,
             }}
           >
+            <div className="rivet rivet-tl" />
+            <div className="rivet rivet-tr" />
+            <div className="rivet rivet-bl" />
+            <div className="rivet rivet-br" />
+
             <div
               style={{
                 display: 'flex',
@@ -100,7 +108,7 @@ export const App: React.FC = () => {
               <span style={{ fontSize: '11px', color: '#fbd38d' }}>GOLD</span>
             </div>
 
-            <div style={{ width: '1px', height: '24px', background: 'rgba(72,187,120,0.3)' }} />
+            <div style={{ width: '1px', height: '24px', background: 'rgba(214,158,46,0.3)' }} />
 
             <div
               style={{
@@ -116,7 +124,7 @@ export const App: React.FC = () => {
               <span style={{ fontSize: '11px', color: '#81e6d9' }}>kWh</span>
             </div>
 
-            <div style={{ width: '1px', height: '24px', background: 'rgba(72,187,120,0.3)' }} />
+            <div style={{ width: '1px', height: '24px', background: 'rgba(214,158,46,0.3)' }} />
 
             <div
               style={{
@@ -132,6 +140,71 @@ export const App: React.FC = () => {
               <span style={{ fontSize: '11px', color: '#90cdf4' }}>L</span>
             </div>
           </div>
+
+          {/* Active Incident Alert Banner */}
+          {activeIncidents.length > 0 && (
+            <div
+              className="glass-panel incident-alarm-bar frame-solarpunk"
+              style={{
+                position: 'absolute',
+                top: '78px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                padding: '10px 22px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '16px',
+                zIndex: 200,
+                backgroundColor: 'rgba(50, 15, 15, 0.95)',
+                borderColor: '#e53e3e',
+                boxShadow: '0 0 25px rgba(229, 62, 62, 0.45)',
+              }}
+            >
+              <div className="rivet rivet-tl" />
+              <div className="rivet rivet-tr" />
+              <div className="rivet rivet-bl" />
+              <div className="rivet rivet-br" />
+
+              <AlertCircle size={22} color="#fc8181" />
+              <div>
+                <div
+                  style={{
+                    fontWeight: 800,
+                    color: '#fed7d7',
+                    fontSize: '13px',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  CRITICAL INCIDENT: {activeIncidents[0].title}
+                </div>
+                <div style={{ fontSize: '12px', color: '#feb2b2' }}>
+                  Target:{' '}
+                  <span style={{ fontFamily: 'monospace', color: '#ecc94b' }}>
+                    {activeIncidents[0].affectedServiceName}
+                  </span>{' '}
+                  — Irrigation stopped.
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn-solarpunk"
+                onClick={() => {
+                  setActiveWindow('terminal');
+                  togglePc(true);
+                }}
+                style={{
+                  background: 'linear-gradient(135deg, #c53030, #9b2c2c)',
+                  borderColor: '#feb2b2',
+                  color: '#fff',
+                  padding: '6px 14px',
+                  fontWeight: 700,
+                  fontSize: '12px',
+                }}
+              >
+                <Terminal size={14} /> Troubleshoot (TAB)
+              </button>
+            </div>
+          )}
 
           {/* Top Center: Active Placement Mode Banner */}
           {placementMode.active && placingBlueprint && (
@@ -197,15 +270,19 @@ export const App: React.FC = () => {
           >
             {activeObjective && (
               <div
-                className="glass-panel"
+                className="glass-panel frame-solarpunk"
                 style={{
-                  padding: '8px 14px',
+                  padding: '9px 18px',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px',
+                  gap: '10px',
                   fontSize: '13px',
                 }}
               >
+                <div className="rivet rivet-tl" />
+                <div className="rivet rivet-tr" />
+                <div className="rivet rivet-bl" />
+                <div className="rivet rivet-br" />
                 <Sparkles size={16} color="#ecc94b" />
                 <span style={{ color: '#cbd5e0' }}>Goal:</span>
                 <strong style={{ color: '#f0fff4' }}>{activeObjective.title}</strong>
@@ -226,25 +303,30 @@ export const App: React.FC = () => {
             </button>
           </div>
 
-          {/* Bottom Center: Quick Building Blueprints & Navigation Bar */}
+          {/* Bottom Center: Quick Building Blueprints, Incident Trigger & Controls */}
           <div
-            className="glass-panel"
+            className="glass-panel frame-solarpunk"
             style={{
               position: 'absolute',
               bottom: '20px',
               left: '50%',
               transform: 'translateX(-50%)',
-              padding: '10px 18px',
+              padding: '10px 20px',
               display: 'flex',
               alignItems: 'center',
               gap: '14px',
               zIndex: 100,
             }}
           >
+            <div className="rivet rivet-tl" />
+            <div className="rivet rivet-tr" />
+            <div className="rivet rivet-bl" />
+            <div className="rivet rivet-br" />
+
             <div
               style={{
                 fontSize: '12px',
-                color: '#a0aec0',
+                color: '#ecc94b',
                 fontWeight: 700,
                 letterSpacing: '0.04em',
               }}
@@ -270,7 +352,26 @@ export const App: React.FC = () => {
               <Cpu size={15} color="#48bb78" /> Build Glasshouse (1000 G)
             </button>
 
-            <div style={{ width: '1px', height: '24px', background: 'rgba(72,187,120,0.3)' }} />
+            <div style={{ width: '1px', height: '24px', background: 'rgba(214,158,46,0.3)' }} />
+
+            {/* Incident Simulation Trigger Button */}
+            <button
+              type="button"
+              className="btn-solarpunk"
+              onClick={() => triggerIncident('process-crash')}
+              style={{
+                padding: '7px 14px',
+                fontSize: '12px',
+                background: 'rgba(197, 48, 48, 0.25)',
+                borderColor: 'rgba(229, 62, 62, 0.6)',
+                color: '#fc8181',
+              }}
+              title="Simulate service failure to test triage and recovery"
+            >
+              ⚡ Trigger Incident
+            </button>
+
+            <div style={{ width: '1px', height: '24px', background: 'rgba(214,158,46,0.3)' }} />
 
             <div
               style={{

@@ -24,6 +24,11 @@ export type HeliosWindowId =
   | 'knowledge'
   | 'objectives';
 
+export interface PlacementState {
+  active: boolean;
+  buildingType: BuildingType | null;
+}
+
 interface GameStore {
   farmState: FarmState;
   buildings: BuildingInstance[];
@@ -33,6 +38,7 @@ interface GameStore {
   activeWindow: HeliosWindowId;
   activeBlueprint: BuildingBlueprint | null;
   activeMicroLesson: MicroLesson | null;
+  placementMode: PlacementState;
 
   serviceManager: ServiceManager;
   incidentEngine: IncidentEngine;
@@ -45,6 +51,8 @@ interface GameStore {
   closeBlueprint: () => void;
   openMicroLesson: (m: MicroLesson) => void;
   closeMicroLesson: () => void;
+  startPlacement: (type: BuildingType) => void;
+  cancelPlacement: () => void;
   plantCrop: (cropType: CropType, x: number, y: number) => boolean;
   harvestCrop: (cropId: string) => { success: boolean; goldEarned: number };
   constructBuilding: (
@@ -143,6 +151,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   activeWindow: 'observatory',
   activeBlueprint: null,
   activeMicroLesson: null,
+  placementMode: { active: false, buildingType: null },
 
   serviceManager: initialServiceManager,
   incidentEngine: initialIncidentEngine,
@@ -160,6 +169,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   openMicroLesson: (m) => set({ activeMicroLesson: m }),
   closeMicroLesson: () => set({ activeMicroLesson: null }),
+
+  startPlacement: (type) =>
+    set({
+      placementMode: { active: true, buildingType: type },
+      pcOpen: false, // Return to farm view immediately
+      activeBlueprint: null,
+    }),
+
+  cancelPlacement: () =>
+    set({
+      placementMode: { active: false, buildingType: null },
+    }),
 
   learnCompetency: (id) =>
     set((state) => {
@@ -314,6 +335,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       },
       buildings: [...buildings, newBuilding],
       objectives: updatedObjectives,
+      placementMode: { active: false, buildingType: null },
     });
 
     return {

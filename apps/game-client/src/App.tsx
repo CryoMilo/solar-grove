@@ -5,10 +5,12 @@ import {
   Cpu,
   Droplets,
   Monitor,
+  Move,
   Play,
   Sparkles,
   Sun,
   Terminal,
+  X,
   Zap,
 } from 'lucide-react';
 import type React from 'react';
@@ -31,6 +33,10 @@ export const App: React.FC = () => {
   const activeMicroLesson = useGameStore((s) => s.activeMicroLesson);
   const closeMicroLesson = useGameStore((s) => s.closeMicroLesson);
 
+  const placementMode = useGameStore((s) => s.placementMode);
+  const startPlacement = useGameStore((s) => s.startPlacement);
+  const cancelPlacement = useGameStore((s) => s.cancelPlacement);
+
   // 1. Simulation loop (1 tick per second)
   useEffect(() => {
     const timer = setInterval(() => {
@@ -39,23 +45,28 @@ export const App: React.FC = () => {
     return () => clearInterval(timer);
   }, [tick]);
 
-  // 2. Global TAB shortcut to toggle PC
+  // 2. Global TAB shortcut to toggle PC & Escape to cancel placement
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Tab') {
         e.preventDefault();
         togglePc();
+      } else if (e.key === 'Escape') {
+        cancelPlacement();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePc]);
+  }, [togglePc, cancelPlacement]);
 
   const activeObjective = objectives.find((o) => !o.completed) || objectives[0];
+  const placingBlueprint = placementMode.buildingType
+    ? BUILDINGS[placementMode.buildingType]
+    : null;
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
-      {/* 2D Pixel Farm Canvas */}
+      {/* 2.5D Isometric Bird's-Eye Farm Canvas */}
       <PhaserGame />
 
       {/* Farm HUD Overlays (Visible when PC is closed) */}
@@ -122,6 +133,56 @@ export const App: React.FC = () => {
             </div>
           </div>
 
+          {/* Top Center: Active Placement Mode Banner */}
+          {placementMode.active && placingBlueprint && (
+            <div
+              className="glass-panel glass-panel-glow"
+              style={{
+                position: 'absolute',
+                top: '16px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                padding: '10px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '16px',
+                zIndex: 150,
+                backgroundColor: 'rgba(20, 45, 37, 0.95)',
+                border: '1px solid #48bb78',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  color: '#ecc94b',
+                  fontWeight: 700,
+                }}
+              >
+                <Sun size={18} />
+                <span>Placing: {placingBlueprint.solarpunkName}</span>
+              </div>
+              <span style={{ fontSize: '12px', color: '#cbd5e0' }}>
+                Click on the farm to construct ({placingBlueprint.constructionCost} G)
+              </span>
+              <button
+                type="button"
+                className="btn-solarpunk"
+                onClick={cancelPlacement}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: '11px',
+                  background: 'rgba(229, 62, 62, 0.25)',
+                  borderColor: '#e53e3e',
+                  color: '#fc8181',
+                }}
+              >
+                <X size={13} /> Cancel (ESC)
+              </button>
+            </div>
+          )}
+
           {/* Top Right: Objective Banner & PC Switch */}
           <div
             style={{
@@ -152,6 +213,7 @@ export const App: React.FC = () => {
             )}
 
             <button
+              type="button"
               className="btn-solarpunk btn-gold"
               onClick={() => togglePc(true)}
               style={{
@@ -164,7 +226,7 @@ export const App: React.FC = () => {
             </button>
           </div>
 
-          {/* Bottom Center: Quick Building Blueprints & Actions */}
+          {/* Bottom Center: Quick Building Blueprints & Navigation Bar */}
           <div
             className="glass-panel"
             style={{
@@ -172,39 +234,60 @@ export const App: React.FC = () => {
               bottom: '20px',
               left: '50%',
               transform: 'translateX(-50%)',
-              padding: '10px 16px',
+              padding: '10px 18px',
               display: 'flex',
               alignItems: 'center',
-              gap: '12px',
+              gap: '14px',
               zIndex: 100,
             }}
           >
             <div
-              style={{ fontSize: '12px', color: '#a0aec0', marginRight: '6px', fontWeight: 600 }}
+              style={{
+                fontSize: '12px',
+                color: '#a0aec0',
+                fontWeight: 700,
+                letterSpacing: '0.04em',
+              }}
             >
-              BUILD BLUEPRINTS:
+              CONSTRUCT:
             </div>
 
             <button
+              type="button"
               className="btn-solarpunk"
-              onClick={() => openBlueprint(BUILDINGS['helio-pump'])}
-              style={{ padding: '6px 14px', fontSize: '12px' }}
+              onClick={() => startPlacement('helio-pump')}
+              style={{ padding: '7px 14px', fontSize: '12px' }}
             >
-              <Sun size={15} color="#ecc94b" /> Helio Pump
+              <Sun size={15} color="#ecc94b" /> Build Helio Pump (250 G)
             </button>
 
             <button
+              type="button"
               className="btn-solarpunk"
-              onClick={() => openBlueprint(BUILDINGS['verdant-glasshouse'])}
-              style={{ padding: '6px 14px', fontSize: '12px' }}
+              onClick={() => startPlacement('verdant-glasshouse')}
+              style={{ padding: '7px 14px', fontSize: '12px' }}
             >
-              <Cpu size={15} color="#48bb78" /> Verdant Glasshouse
+              <Cpu size={15} color="#48bb78" /> Build Glasshouse (1000 G)
             </button>
 
-            <div style={{ width: '1px', height: '20px', background: 'rgba(72,187,120,0.3)' }} />
+            <div style={{ width: '1px', height: '24px', background: 'rgba(72,187,120,0.3)' }} />
 
-            <div style={{ fontSize: '11px', color: '#9ae6b4', fontStyle: 'italic' }}>
-              Tip: Click soil to plant Sunroot • Click mature crops to harvest
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '11px',
+                color: '#9ae6b4',
+              }}
+            >
+              <span>🖱️ Drag to Pan</span>
+              <span>•</span>
+              <span>🔍 Scroll to Zoom</span>
+              <span>•</span>
+              <span>🌱 Click Soil to Plant</span>
+              <span>•</span>
+              <span>🌾 Click Mature Crop to Harvest</span>
             </div>
           </div>
         </>

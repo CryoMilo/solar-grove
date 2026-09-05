@@ -22,7 +22,7 @@ interface BlueprintModalProps {
 export const BlueprintModal: React.FC<BlueprintModalProps> = ({ blueprint, onClose }) => {
   const knowledgeMap = useGameStore((s) => s.knowledgeMap);
   const openMicroLesson = useGameStore((s) => s.openMicroLesson);
-  const constructBuilding = useGameStore((s) => s.constructBuilding);
+  const startPlacement = useGameStore((s) => s.startPlacement);
   const setActiveWindow = useGameStore((s) => s.setActiveWindow);
   const togglePc = useGameStore((s) => s.togglePc);
   const gold = useGameStore((s) => s.farmState.gold);
@@ -46,6 +46,7 @@ export const BlueprintModal: React.FC<BlueprintModalProps> = ({ blueprint, onClo
           color: '#ecc94b',
           bg: 'rgba(236, 201, 75, 0.15)',
         };
+      case 'not-learned':
       default:
         return {
           icon: <HardDrive size={16} color="#fc8181" />,
@@ -64,12 +65,8 @@ export const BlueprintModal: React.FC<BlueprintModalProps> = ({ blueprint, onClo
   };
 
   const handleBuild = () => {
-    // Construct building at farm center offset
-    const res = constructBuilding(blueprint.id, 22, 18);
-    alert(res.message);
-    if (res.success) {
-      onClose();
-    }
+    startPlacement(blueprint.id);
+    onClose();
   };
 
   const handleOpenTerminal = () => {

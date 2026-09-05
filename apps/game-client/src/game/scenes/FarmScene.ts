@@ -1,185 +1,296 @@
 import { BUILDINGS } from '@solar-grove/content';
-import type { BuildingInstance, CropInstance } from '@solar-grove/game-types';
+import type { BuildingInstance, BuildingType, CropInstance } from '@solar-grove/game-types';
 import Phaser from 'phaser';
 import { useGameStore } from '../../stores/useGameStore';
 
 export class FarmScene extends Phaser.Scene {
-  private player!: Phaser.GameObjects.Sprite;
-  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-  private wasd!: {
-    W: Phaser.Input.Keyboard.Key;
-    A: Phaser.Input.Keyboard.Key;
-    S: Phaser.Input.Keyboard.Key;
-    D: Phaser.Input.Keyboard.Key;
-  };
+  private gridWidth = 40;
+  private gridHeight = 40;
+  private tileWidth = 64;
+  private tileHeight = 32;
+  private originX = 20 * 64;
+  private originY = 120;
 
+  // Camera drag state
+  private isDragging = false;
+  private dragStartX = 0;
+  private dragStartY = 0;
+  private camStartX = 0;
+  private camStartY = 0;
+  private dragDistance = 0;
+
+  // Visual Entity Maps
+  private tileSprites: Map<string, Phaser.GameObjects.Image> = new Map();
   private cropSprites: Map<string, Phaser.GameObjects.Sprite> = new Map();
   private buildingObjects: Map<
     string,
     {
       sprite: Phaser.GameObjects.Sprite;
       badge: Phaser.GameObjects.Sprite;
+      gx: number;
+      gy: number;
     }
   > = new Map();
 
-  private gridWidth = 40;
-  private gridHeight = 40;
-  private tileSize = 32;
+  // Placement mode & hover visuals
+  private hoverCursor!: Phaser.GameObjects.Image;
+  private ghostBuildingSprite!: Phaser.GameObjects.Sprite;
+  private waterParticles: Phaser.GameObjects.Arc[] = [];
 
   constructor() {
     super('FarmScene');
   }
 
   create() {
-    // 1. Build Farm Tilemap
-    this.createFarmGrid();
+    // 1. Build 3D Isometric Farm Grid
+    this.createIsometricGrid();
 
-    // 2. Spawn Player at farm center
-    const startX = 20 * this.tileSize;
-    const startY = 20 * this.tileSize;
-    this.player = this.add.sprite(startX, startY, 'player');
-    this.player.setDepth(10);
+    // 2. Center Camera initially over the Grove
+    const centerPos = this.gridToIso(20, 20);
+    this.cameras.main.centerOn(centerPos.x, centerPos.y);
+    this.cameras.main.setZoom(1.15);
 
-    // 3. Setup Camera & Bounds
-    this.cameras.main.setBounds(
-      0,
-      0,
-      this.gridWidth * this.tileSize,
-      this.gridHeight * this.tileSize
-    );
-    this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
-    this.cameras.main.setZoom(1.5);
+    // 3. Hover & Placement Cursors
+    this.hoverCursor = this.add.image(0, 0, 'iso_cursor_valid');
+    this.hoverCursor.setOrigin(0.5, 0.5);
+    this.hoverCursor.setDepth(9999);
+    this.hoverCursor.setVisible(false);
 
-    // 4. Input handling
-    if (this.input.keyboard) {
-      this.cursors = this.input.keyboard.createCursorKeys();
-      this.wasd = {
-        W: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
-        A: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
-        S: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
-        D: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
-      };
-    }
+    this.ghostBuildingSprite = this.add.sprite(0, 0, 'iso_building_helio_pump');
+    this.ghostBuildingSprite.setOrigin(0.5, 0.75);
+    this.ghostBuildingSprite.setDepth(10000);
+    this.ghostBuildingSprite.setAlpha(0.6);
+    this.ghostBuildingSprite.setVisible(false);
 
-    // 5. Farm click interaction (plant or harvest)
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-      const tileX = Math.floor(worldPoint.x / this.tileSize);
-      const tileY = Math.floor(worldPoint.y / this.tileSize);
+    // 4. Mouse Input Handling (Smurf Village Pan & Zoom)
+    this.setupCameraControls();
 
-      this.handleTileClick(tileX, tileY);
-    });
-
-    // 6. Hook Zustand store updates
+    // 5. Hook Zustand store updates
     useGameStore.subscribe((state) => {
       this.syncCrops(state.farmState.crops);
       this.syncBuildings(state.buildings);
+      this.updatePlacementGhost(state.placementMode.active, state.placementMode.buildingType);
     });
 
     // Initial sync
-    const state = useGameStore.getState();
-    this.syncCrops(state.farmState.crops);
-    this.syncBuildings(state.buildings);
+    const initialState = useGameStore.getState();
+    this.syncCrops(initialState.farmState.crops);
+    this.syncBuildings(initialState.buildings);
+
+    // Periodic water spray effect for running irrigation pumps
+    this.time.addEvent({
+      delay: 400,
+      callback: () => this.emitIrrigationParticles(),
+      loop: true,
+    });
   }
 
   update() {
-    const speed = 3;
-    let dx = 0;
-    let dy = 0;
+    // Keep hover cursor aligned with pointer
+    const pointer = this.input.activePointer;
+    const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+    const { x: gx, y: gy } = this.isoToGrid(worldPoint.x, worldPoint.y);
 
-    if (this.cursors.left.isDown || this.wasd.A.isDown) dx -= speed;
-    if (this.cursors.right.isDown || this.wasd.D.isDown) dx += speed;
-    if (this.cursors.up.isDown || this.wasd.W.isDown) dy -= speed;
-    if (this.cursors.down.isDown || this.wasd.S.isDown) dy += speed;
+    const store = useGameStore.getState();
+    const isPlacement = store.placementMode.active;
 
-    if (dx !== 0 && dy !== 0) {
-      dx *= Math.SQRT1_2;
-      dy *= Math.SQRT1_2;
+    if (gx >= 0 && gx < this.gridWidth && gy >= 0 && gy < this.gridHeight) {
+      const isoPos = this.gridToIso(gx, gy);
+      this.hoverCursor.setPosition(isoPos.x, isoPos.y);
+      this.hoverCursor.setVisible(true);
+
+      const isOccupied = store.buildings.some(
+        (b) => gx >= b.x && gx <= b.x + 1 && gy >= b.y && gy <= b.y + 1
+      );
+
+      if (isPlacement) {
+        this.hoverCursor.setTexture(isOccupied ? 'iso_cursor_invalid' : 'iso_cursor_valid');
+        this.ghostBuildingSprite.setPosition(isoPos.x, isoPos.y);
+        this.ghostBuildingSprite.setVisible(true);
+      } else {
+        this.hoverCursor.setTexture('iso_cursor_valid');
+        this.ghostBuildingSprite.setVisible(false);
+      }
+    } else {
+      this.hoverCursor.setVisible(false);
+      this.ghostBuildingSprite.setVisible(false);
     }
-
-    this.player.x = Phaser.Math.Clamp(this.player.x + dx, 16, this.gridWidth * this.tileSize - 16);
-    this.player.y = Phaser.Math.Clamp(this.player.y + dy, 16, this.gridHeight * this.tileSize - 16);
   }
 
-  private createFarmGrid() {
-    for (let y = 0; y < this.gridHeight; y++) {
-      for (let x = 0; x < this.gridWidth; x++) {
-        const posX = x * this.tileSize + 16;
-        const posY = y * this.tileSize + 16;
+  /**
+   * Transforms 2D grid coordinates (gx, gy) into 3D isometric screen coordinates.
+   */
+  public gridToIso(gx: number, gy: number): { x: number; y: number } {
+    return {
+      x: (gx - gy) * (this.tileWidth / 2) + this.originX,
+      y: (gx + gy) * (this.tileHeight / 2) + this.originY,
+    };
+  }
 
-        // Path across center
-        if (x === 20 || y === 20) {
-          this.add.image(posX, posY, 'tile_path').setDepth(0);
-        } else if (x >= 15 && x <= 25 && y >= 15 && y <= 25) {
-          // Central Soil Plots
-          this.add.image(posX, posY, 'tile_soil').setDepth(0);
-        } else {
-          // Surrounding Solarpunk Grassland
-          this.add.image(posX, posY, 'tile_grass').setDepth(0);
+  /**
+   * Transforms screen/world coordinates into 2D grid coordinates.
+   */
+  public isoToGrid(worldX: number, worldY: number): { x: number; y: number } {
+    const relX = worldX - this.originX;
+    const relY = worldY - this.originY;
+    const gx = Math.floor((relX / (this.tileWidth / 2) + relY / (this.tileHeight / 2)) / 2);
+    const gy = Math.floor((relY / (this.tileHeight / 2) - relX / (this.tileWidth / 2)) / 2);
+    return { x: gx, y: gy };
+  }
+
+  private createIsometricGrid() {
+    for (let gy = 0; gy < this.gridHeight; gy++) {
+      for (let gx = 0; gx < this.gridWidth; gx++) {
+        const { x: isoX, y: isoY } = this.gridToIso(gx, gy);
+
+        let texture = 'iso_grass';
+        if (gx === 20 || gy === 20) {
+          texture = 'iso_path';
+        } else if (gx >= 15 && gx <= 25 && gy >= 15 && gy <= 25) {
+          texture = 'iso_soil';
         }
+
+        const tile = this.add.image(isoX, isoY, texture);
+        tile.setOrigin(0.5, 0.38); // Standard isometric anchor accounting for 8px thickness
+        tile.setDepth((gx + gy) * 10);
+        this.tileSprites.set(`${gx},${gy}`, tile);
       }
     }
   }
 
-  private handleTileClick(tileX: number, tileY: number) {
-    const state = useGameStore.getState();
+  private setupCameraControls() {
+    // 1. Mouse Drag-to-Pan (Smurf Village Pan)
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      // Right click cancels placement
+      if (pointer.rightButtonDown()) {
+        useGameStore.getState().cancelPlacement();
+        return;
+      }
 
-    // Check if clicked an existing crop
-    const existingCrop = state.farmState.crops.find((c) => c.x === tileX && c.y === tileY);
-    if (existingCrop) {
-      if (existingCrop.stage === 'mature') {
-        const res = state.harvestCrop(existingCrop.id);
-        if (res.success) {
-          this.showHarvestFloatText(tileX * 32 + 16, tileY * 32, `+${res.goldEarned} Gold!`);
-        }
+      this.isDragging = true;
+      this.dragStartX = pointer.x;
+      this.dragStartY = pointer.y;
+      this.camStartX = this.cameras.main.scrollX;
+      this.camStartY = this.cameras.main.scrollY;
+      this.dragDistance = 0;
+    });
+
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (this.isDragging) {
+        const dx = (pointer.x - this.dragStartX) / this.cameras.main.zoom;
+        const dy = (pointer.y - this.dragStartY) / this.cameras.main.zoom;
+        this.cameras.main.scrollX = this.camStartX - dx;
+        this.cameras.main.scrollY = this.camStartY - dy;
+        this.dragDistance += Math.abs(dx) + Math.abs(dy);
+      }
+    });
+
+    this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      this.isDragging = false;
+      // If user clicked with minimal drag, process tile click!
+      if (this.dragDistance < 6) {
+        const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+        const { x: gx, y: gy } = this.isoToGrid(worldPoint.x, worldPoint.y);
+        this.handleTileClick(gx, gy);
+      }
+    });
+
+    // 2. Mouse Wheel Zooming
+    this.input.on(
+      'wheel',
+      (pointer: Phaser.Input.Pointer, gameObjects: unknown, deltaX: number, deltaY: number) => {
+        const currentZoom = this.cameras.main.zoom;
+        const zoomFactor = deltaY > 0 ? 0.9 : 1.1;
+        const newZoom = Phaser.Math.Clamp(currentZoom * zoomFactor, 0.65, 2.2);
+        this.cameras.main.setZoom(newZoom);
+      }
+    );
+
+    // Prevent context menu on right click
+    this.game.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  private handleTileClick(gx: number, gy: number) {
+    const store = useGameStore.getState();
+
+    // 1. Placement Mode handling
+    if (store.placementMode.active && store.placementMode.buildingType) {
+      if (gx < 0 || gx >= this.gridWidth || gy < 0 || gy >= this.gridHeight) return;
+
+      const isOccupied = store.buildings.some(
+        (b) => gx >= b.x && gx <= b.x + 1 && gy >= b.y && gy <= b.y + 1
+      );
+      if (isOccupied) {
+        this.showFloatMessage(this.gridToIso(gx, gy), 'Area Occupied!', '#e53e3e');
+        return;
+      }
+
+      const res = store.constructBuilding(store.placementMode.buildingType, gx, gy);
+      if (res.success) {
+        this.showFloatMessage(this.gridToIso(gx, gy), 'Structure Built!', '#48bb78');
+      } else {
+        this.showFloatMessage(this.gridToIso(gx, gy), res.message, '#e53e3e');
       }
       return;
     }
 
-    // Check if clicked a building
-    const clickedBuilding = state.buildings.find(
-      (b) => tileX >= b.x && tileX <= b.x + 1 && tileY >= b.y && tileY <= b.y + 1
+    // 2. Check if clicked an existing building
+    const clickedBuilding = store.buildings.find(
+      (b) => gx >= b.x && gx <= b.x + 1 && gy >= b.y && gy <= b.y + 1
     );
     if (clickedBuilding) {
       const blueprint = BUILDINGS[clickedBuilding.type];
       if (blueprint) {
-        state.openBlueprint(blueprint);
+        store.openBlueprint(blueprint);
       }
       return;
     }
 
-    // Otherwise, plant Sunroot if clicking in soil area
-    if (tileX >= 15 && tileX <= 25 && tileY >= 15 && tileY <= 25) {
-      state.plantCrop('sunroot', tileX, tileY);
+    // 3. Check if clicked an existing crop
+    const existingCrop = store.farmState.crops.find((c) => c.x === gx && c.y === gy);
+    if (existingCrop) {
+      if (existingCrop.stage === 'mature') {
+        const res = store.harvestCrop(existingCrop.id);
+        if (res.success) {
+          const isoPos = this.gridToIso(gx, gy);
+          this.showFloatMessage(isoPos, `+${res.goldEarned} Gold!`, '#ecc94b');
+        }
+      } else {
+        const isoPos = this.gridToIso(gx, gy);
+        this.showFloatMessage(
+          isoPos,
+          `Growing (${Math.round(existingCrop.growthProgress * 100)}%)`,
+          '#68d391'
+        );
+      }
+      return;
+    }
+
+    // 4. If empty soil clicked, plant Sunroot!
+    if (gx >= 15 && gx <= 25 && gy >= 15 && gy <= 25) {
+      const planted = store.plantCrop('sunroot', gx, gy);
+      if (planted) {
+        const isoPos = this.gridToIso(gx, gy);
+        this.showFloatMessage(isoPos, 'Sunroot Planted!', '#ecc94b');
+      }
     }
   }
 
-  private showHarvestFloatText(x: number, y: number, text: string) {
-    const floatText = this.add.text(x, y, text, {
-      fontFamily: 'Outfit, sans-serif',
-      fontSize: '14px',
-      color: '#ecc94b',
-      fontStyle: 'bold',
-      stroke: '#000000',
-      strokeThickness: 3,
-    });
-    floatText.setOrigin(0.5, 0.5);
-    floatText.setDepth(20);
-
-    this.tweens.add({
-      targets: floatText,
-      y: y - 28,
-      alpha: 0,
-      duration: 1000,
-      ease: 'Power1',
-      onComplete: () => floatText.destroy(),
-    });
+  private updatePlacementGhost(active: boolean, type: BuildingType | null) {
+    if (active && type) {
+      let texture = 'iso_building_helio_pump';
+      if (type === 'verdant-glasshouse') texture = 'iso_building_verdant_glasshouse';
+      this.ghostBuildingSprite.setTexture(texture);
+      this.ghostBuildingSprite.setVisible(true);
+    } else {
+      this.ghostBuildingSprite.setVisible(false);
+    }
   }
 
   private syncCrops(crops: CropInstance[]) {
     const currentCropIds = new Set(crops.map((c) => c.id));
 
-    // Remove obsolete sprites
+    // Remove harvested crops
     for (const [id, sprite] of this.cropSprites.entries()) {
       if (!currentCropIds.has(id)) {
         sprite.destroy();
@@ -187,17 +298,20 @@ export class FarmScene extends Phaser.Scene {
       }
     }
 
-    // Create or update sprites
+    // Add or update 3D isometric crops
     for (const crop of crops) {
-      let textureKey = 'crop_sunroot_seed';
-      if (crop.stage === 'sprout') textureKey = 'crop_sunroot_sprout';
-      else if (crop.stage === 'growing') textureKey = 'crop_sunroot_growing';
-      else if (crop.stage === 'mature') textureKey = 'crop_sunroot_mature';
+      let textureKey = 'iso_crop_sunroot_seed';
+      if (crop.stage === 'sprout') textureKey = 'iso_crop_sunroot_sprout';
+      else if (crop.stage === 'growing') textureKey = 'iso_crop_sunroot_growing';
+      else if (crop.stage === 'mature') textureKey = 'iso_crop_sunroot_mature';
 
+      const isoPos = this.gridToIso(crop.x, crop.y);
       let sprite = this.cropSprites.get(crop.id);
+
       if (!sprite) {
-        sprite = this.add.sprite(crop.x * 32 + 16, crop.y * 32 + 16, textureKey);
-        sprite.setDepth(5);
+        sprite = this.add.sprite(isoPos.x, isoPos.y, textureKey);
+        sprite.setOrigin(0.5, 0.7);
+        sprite.setDepth((crop.x + crop.y) * 10 + 5);
         this.cropSprites.set(crop.id, sprite);
       } else {
         sprite.setTexture(textureKey);
@@ -217,23 +331,81 @@ export class FarmScene extends Phaser.Scene {
     }
 
     for (const b of buildings) {
-      let texture = 'building_helio_pump';
-      if (b.type === 'verdant-glasshouse') texture = 'building_verdant_glasshouse';
+      let texture = 'iso_building_helio_pump';
+      if (b.type === 'verdant-glasshouse') texture = 'iso_building_verdant_glasshouse';
 
+      const isoPos = this.gridToIso(b.x, b.y);
       const obj = this.buildingObjects.get(b.id);
+
       if (!obj) {
-        const sprite = this.add.sprite(b.x * 32 + 32, b.y * 32 + 32, texture);
-        sprite.setDepth(6);
+        const sprite = this.add.sprite(isoPos.x, isoPos.y, texture);
+        sprite.setOrigin(0.5, 0.72);
+        sprite.setDepth((b.x + b.y) * 10 + 8);
 
         const badgeTexture = b.status === 'healthy' ? 'status_healthy' : 'status_offline';
-        const badge = this.add.sprite(b.x * 32 + 54, b.y * 32 + 10, badgeTexture);
-        badge.setDepth(7);
+        const badge = this.add.sprite(isoPos.x + 20, isoPos.y - 36, badgeTexture);
+        badge.setDepth((b.x + b.y) * 10 + 9);
 
-        this.buildingObjects.set(b.id, { sprite, badge });
+        this.buildingObjects.set(b.id, { sprite, badge, gx: b.x, gy: b.y });
       } else {
         const badgeTexture = b.status === 'healthy' ? 'status_healthy' : 'status_offline';
         obj.badge.setTexture(badgeTexture);
       }
     }
+  }
+
+  private emitIrrigationParticles() {
+    const store = useGameStore.getState();
+    const service = store.serviceManager.getService('irrigation-controller');
+    if (service?.status !== 'running') return;
+
+    for (const b of store.buildings) {
+      if (b.type === 'helio-pump') {
+        const isoPos = this.gridToIso(b.x, b.y);
+
+        // Spawn a subtle sparkling water droplet
+        const droplet = this.add.circle(
+          isoPos.x + Phaser.Math.Between(-15, 25),
+          isoPos.y - Phaser.Math.Between(10, 25),
+          2.5,
+          0x63b3ed,
+          0.85
+        );
+        droplet.setDepth((b.x + b.y) * 10 + 9);
+
+        this.tweens.add({
+          targets: droplet,
+          x: droplet.x + Phaser.Math.Between(-20, 20),
+          y: droplet.y + Phaser.Math.Between(10, 20),
+          alpha: 0,
+          scale: 0.2,
+          duration: 700,
+          ease: 'Cubic.easeOut',
+          onComplete: () => droplet.destroy(),
+        });
+      }
+    }
+  }
+
+  private showFloatMessage(pos: { x: number; y: number }, message: string, color: string) {
+    const floatText = this.add.text(pos.x, pos.y - 20, message, {
+      fontFamily: 'Outfit, sans-serif',
+      fontSize: '15px',
+      color: color,
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: 3,
+    });
+    floatText.setOrigin(0.5, 0.5);
+    floatText.setDepth(100000);
+
+    this.tweens.add({
+      targets: floatText,
+      y: pos.y - 48,
+      alpha: 0,
+      duration: 1100,
+      ease: 'Power1',
+      onComplete: () => floatText.destroy(),
+    });
   }
 }

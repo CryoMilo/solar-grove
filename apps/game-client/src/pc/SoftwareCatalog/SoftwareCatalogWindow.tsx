@@ -2,6 +2,7 @@ import { SOFTWARE_CATALOG } from '@solar-grove/content';
 import type { SoftwareDefinition } from '@solar-grove/game-types';
 import {
   Activity,
+  AlertTriangle,
   CheckCircle2,
   Cpu,
   Database,
@@ -33,9 +34,27 @@ export const SoftwareCatalogWindow: React.FC = () => {
   const catalogItems = Object.values(SOFTWARE_CATALOG);
 
   const getItemStatus = (item: SoftwareDefinition): 'running' | 'offline' | 'unhosted' => {
+    if (item.deployment === 'docker' || item.id === 'greenhouse-controller') {
+      const container = serviceManager.findContainer('greenhouse-controller');
+      if (!container) return 'unhosted';
+      return container.status === 'RUNNING' && container.health === 'HEALTHY'
+        ? 'running'
+        : 'offline';
+    }
     const svc = serviceManager.getService(item.serviceName);
     if (!svc) return 'unhosted';
     return svc.status === 'running' ? 'running' : 'offline';
+  };
+
+  const getItemDeploymentStatus = (item: SoftwareDefinition): string => {
+    if (item.deployment === 'docker' || item.id === 'greenhouse-controller') {
+      const c = serviceManager.findContainer('greenhouse-controller');
+      if (!c) return 'NOT_DEPLOYED';
+      if (c.status === 'RUNNING') return c.health === 'HEALTHY' ? 'RUNNING' : 'DEGRADED';
+      return c.status;
+    }
+    const svc = serviceManager.getService(item.serviceName);
+    return svc?.deploymentStatus || 'NOT_DEPLOYED';
   };
 
   const filteredItems = catalogItems.filter((item) => {
@@ -55,7 +74,12 @@ export const SoftwareCatalogWindow: React.FC = () => {
 
   const selectedSvc = serviceManager.getService(selectedItem.serviceName);
   const selectedStatus = getItemStatus(selectedItem);
-  const deploymentStatus = selectedSvc?.deploymentStatus || 'NOT_DEPLOYED';
+  const isDocker =
+    selectedItem.deployment === 'docker' || selectedItem.id === 'greenhouse-controller';
+  const selectedContainer = isDocker
+    ? serviceManager.findContainer('greenhouse-controller')
+    : undefined;
+  const deploymentStatus = getItemDeploymentStatus(selectedItem);
 
   const handleDeploy = () => {
     const res = deploySoftware(selectedItem.id);
@@ -162,8 +186,7 @@ export const SoftwareCatalogWindow: React.FC = () => {
           {filteredItems.map((item) => {
             const status = getItemStatus(item);
             const isSelected = item.id === selectedId;
-            const svc = serviceManager.getService(item.serviceName);
-            const dStatus = svc?.deploymentStatus || 'NOT_DEPLOYED';
+            const dStatus = getItemDeploymentStatus(item);
 
             return (
               <div
@@ -226,9 +249,11 @@ export const SoftwareCatalogWindow: React.FC = () => {
                       color:
                         status === 'running'
                           ? '#48bb78'
-                          : dStatus === 'DEPLOYED'
-                            ? '#ecc94b'
-                            : '#cbd5e0',
+                          : dStatus === 'DEGRADED'
+                            ? '#f56565'
+                            : dStatus === 'DEPLOYED' || dStatus === 'RUNNING'
+                              ? '#ecc94b'
+                              : '#cbd5e0',
                     }}
                   >
                     {status === 'running' ? (
@@ -236,10 +261,15 @@ export const SoftwareCatalogWindow: React.FC = () => {
                         <CheckCircle2 size={11} />
                         ONLINE
                       </>
-                    ) : dStatus === 'DEPLOYED' ? (
+                    ) : dStatus === 'DEGRADED' ? (
+                      <>
+                        <AlertTriangle size={11} />
+                        UNHEALTHY
+                      </>
+                    ) : dStatus === 'DEPLOYED' || dStatus === 'RUNNING' ? (
                       <>
                         <Server size={11} />
-                        DEPLOYED
+                        {dStatus}
                       </>
                     ) : (
                       <>
@@ -495,7 +525,7 @@ export const SoftwareCatalogWindow: React.FC = () => {
           </div>
 
           {/* Supported Deployment Targets */}
-          <div style={{ marginBottom: '24px' }}>
+          <div style={{ marginBottom: '20px' }}>
             <h4
               style={{
                 fontSize: '12px',
@@ -526,6 +556,73 @@ export const SoftwareCatalogWindow: React.FC = () => {
             </div>
           </div>
 
+          {/* Infrastructure & Dependency Requirements */}
+          {selectedItem.requirements && selectedItem.requirements.length > 0 && (
+            <div style={{ marginBottom: '20px' }}>
+              <h4
+                style={{
+                  fontSize: '12px',
+                  color: '#ecc94b',
+                  textTransform: 'uppercase',
+                  margin: '0 0 8px 0',
+                }}
+              >
+                Runtime Dependencies & Services
+              </h4>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {selectedItem.requirements.map((req) => (
+                  <span
+                    key={req}
+                    style={{
+                      backgroundColor: 'rgba(99,179,237,0.15)',
+                      border: '1px solid rgba(99,179,237,0.35)',
+                      color: '#90cdf4',
+                      padding: '4px 10px',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    ⚙ {req}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Environment Variables Configuration */}
+          {selectedItem.environment && Object.keys(selectedItem.environment).length > 0 && (
+            <div style={{ marginBottom: '24px' }}>
+              <h4
+                style={{
+                  fontSize: '12px',
+                  color: '#ecc94b',
+                  textTransform: 'uppercase',
+                  margin: '0 0 8px 0',
+                }}
+              >
+                Environment Variables
+              </h4>
+              <div
+                style={{
+                  backgroundColor: '#050c09',
+                  border: '1px solid rgba(72,187,120,0.2)',
+                  borderRadius: '6px',
+                  padding: '10px 14px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                }}
+              >
+                {Object.entries(selectedItem.environment).map(([key, val]) => (
+                  <div key={key} style={{ display: 'flex', gap: '10px', marginBottom: '4px' }}>
+                    <span style={{ color: '#ecc94b', fontWeight: 600 }}>{key}=</span>
+                    <span style={{ color: '#9ae6b4', wordBreak: 'break-all' }}>{val}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Interactive Actions for Vertical Slice Loop */}
           <div
             style={{
@@ -535,15 +632,54 @@ export const SoftwareCatalogWindow: React.FC = () => {
               paddingTop: '18px',
             }}
           >
-            {deploymentStatus === 'NOT_DEPLOYED' && (
-              <button
-                type="button"
-                className="btn-solarpunk btn-gold"
-                onClick={handleDeploy}
-                style={{ padding: '8px 16px', fontSize: '12px' }}
-              >
-                <Download size={15} /> Deploy Software Package
-              </button>
+            {isDocker ? (
+              selectedContainer ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 14px',
+                    backgroundColor:
+                      selectedContainer.health === 'HEALTHY'
+                        ? 'rgba(72,187,120,0.15)'
+                        : 'rgba(229,62,62,0.15)',
+                    border: `1px solid ${
+                      selectedContainer.health === 'HEALTHY' ? '#48bb78' : '#e53e3e'
+                    }`,
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    color: selectedContainer.health === 'HEALTHY' ? '#68d391' : '#fc8181',
+                  }}
+                >
+                  <Server size={14} />
+                  <span>
+                    CONTAINER: {selectedContainer.name} ({selectedContainer.status} /{' '}
+                    {selectedContainer.health})
+                  </span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-solarpunk btn-gold"
+                  onClick={() => setActiveWindow('terminal')}
+                  style={{ padding: '8px 16px', fontSize: '12px' }}
+                >
+                  <Terminal size={15} /> Deploy via Docker (Terminal)
+                </button>
+              )
+            ) : (
+              deploymentStatus === 'NOT_DEPLOYED' && (
+                <button
+                  type="button"
+                  className="btn-solarpunk btn-gold"
+                  onClick={handleDeploy}
+                  style={{ padding: '8px 16px', fontSize: '12px' }}
+                >
+                  <Download size={15} /> Deploy Software Package
+                </button>
+              )
             )}
 
             <button
@@ -555,12 +691,13 @@ export const SoftwareCatalogWindow: React.FC = () => {
               <Terminal size={15} /> Manage in Terminal
             </button>
 
-            {selectedItem.id === 'irrigation-controller' && (
+            {(selectedItem.webUrl || selectedItem.id === 'irrigation-controller') && (
               <button
                 type="button"
                 className="btn-solarpunk"
                 onClick={() => {
-                  setBrowserUrl('http://irrigation.local:8080');
+                  const url = selectedItem.webUrl || 'http://irrigation.local:8080';
+                  setBrowserUrl(url);
                   setActiveWindow('browser');
                 }}
                 style={{ padding: '8px 16px', fontSize: '12px' }}

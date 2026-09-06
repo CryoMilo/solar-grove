@@ -65,7 +65,6 @@ export const BrowserWindow: React.FC = () => {
   const telemetry = serviceManager.getIrrigationTelemetry();
   const isPumping = serviceManager.isIrrigationActivelyPumping();
   const isIrrRunning = !isErrConnectionRefused && isIrrigationUrl;
-  const isGhRunning = !isErrConnectionRefused && isGreenhouseUrl;
 
   const handleToggleIrrigation = (start: boolean) => {
     const endpoint = start
@@ -604,12 +603,18 @@ export const BrowserWindow: React.FC = () => {
             </div>
           ))}
 
-        {/* SCENARIO 2: Greenhouse Controller API Web Page */}
+        {/* SCENARIO 2: Greenhouse Controller Web Page */}
         {isGreenhouseUrl &&
-          (isGhRunning ? (
+          (httpResponse.statusCode === 200 ? (
+            /* SCENARIO 2A: Healthy 200 OK Verdant Glasshouse Dashboard (Section 16) */
             <div
               className="glass-panel frame-solarpunk"
-              style={{ width: '100%', maxWidth: '750px', padding: '28px' }}
+              style={{
+                width: '100%',
+                maxWidth: '750px',
+                padding: '28px',
+                position: 'relative',
+              }}
             >
               <div className="rivet rivet-tl" />
               <div className="rivet rivet-tr" />
@@ -638,7 +643,7 @@ export const BrowserWindow: React.FC = () => {
                     }}
                   >
                     <Zap size={24} color="#48bb78" />
-                    <span>VERDANT GLASSHOUSE API</span>
+                    <span>VERDANT GLASSHOUSE</span>
                   </h1>
                   <span
                     style={{
@@ -647,7 +652,8 @@ export const BrowserWindow: React.FC = () => {
                       fontFamily: 'var(--font-mono)',
                     }}
                   >
-                    Host: greenhouse.local:4000 • Container: solar-grove/greenhouse-controller:v1.2
+                    Host: greenhouse.local:4000 • Container: greenhouse-controller • PostgreSQL:
+                    Connected
                   </span>
                 </div>
 
@@ -660,17 +666,23 @@ export const BrowserWindow: React.FC = () => {
                     borderRadius: '6px',
                     fontWeight: 800,
                     fontSize: '13px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
                   }}
                 >
-                  CONTAINER ACTIVE
+                  <CheckCircle2 size={16} />
+                  <span>ONLINE</span>
                 </div>
               </div>
 
+              {/* Climate Telemetry Metrics */}
               <div
                 style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(3, 1fr)',
                   gap: '16px',
+                  marginBottom: '24px',
                 }}
               >
                 <div
@@ -678,43 +690,263 @@ export const BrowserWindow: React.FC = () => {
                     backgroundColor: '#07100d',
                     padding: '16px',
                     borderRadius: '8px',
+                    border: '1px solid rgba(72,187,120,0.25)',
                     textAlign: 'center',
                   }}
                 >
-                  <div style={{ color: '#a0aec0', fontSize: '11px', fontWeight: 700 }}>
+                  <div
+                    style={{
+                      color: '#a0aec0',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      marginBottom: '6px',
+                    }}
+                  >
                     TEMPERATURE
                   </div>
-                  <div style={{ fontSize: '24px', fontWeight: 800, color: '#f6ad55' }}>24.5 °C</div>
+                  <div style={{ fontSize: '26px', fontWeight: 800, color: '#f6ad55' }}>24.5°C</div>
+                  <div style={{ fontSize: '11px', color: '#718096' }}>Optimal Range: 22–26°C</div>
                 </div>
+
                 <div
                   style={{
                     backgroundColor: '#07100d',
                     padding: '16px',
                     borderRadius: '8px',
+                    border: '1px solid rgba(72,187,120,0.25)',
                     textAlign: 'center',
                   }}
                 >
-                  <div style={{ color: '#a0aec0', fontSize: '11px', fontWeight: 700 }}>
+                  <div
+                    style={{
+                      color: '#a0aec0',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      marginBottom: '6px',
+                    }}
+                  >
                     HUMIDITY
                   </div>
-                  <div style={{ fontSize: '24px', fontWeight: 800, color: '#4fd1c5' }}>68 %</div>
+                  <div style={{ fontSize: '26px', fontWeight: 800, color: '#4fd1c5' }}>71%</div>
+                  <div style={{ fontSize: '11px', color: '#718096' }}>Optimal Range: 65–80%</div>
                 </div>
+
                 <div
                   style={{
                     backgroundColor: '#07100d',
                     padding: '16px',
                     borderRadius: '8px',
+                    border: '1px solid rgba(72,187,120,0.25)',
                     textAlign: 'center',
                   }}
                 >
-                  <div style={{ color: '#a0aec0', fontSize: '11px', fontWeight: 700 }}>
-                    YIELD BONUS
+                  <div
+                    style={{
+                      color: '#a0aec0',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      marginBottom: '6px',
+                    }}
+                  >
+                    SOIL MOISTURE
                   </div>
-                  <div style={{ fontSize: '24px', fontWeight: 800, color: '#68d391' }}>+40 %</div>
+                  <div style={{ fontSize: '26px', fontWeight: 800, color: '#48bb78' }}>82%</div>
+                  <div style={{ fontSize: '11px', color: '#718096' }}>
+                    Capillary saturation normal
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Indicators Grid */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: '12px',
+                  marginBottom: '24px',
+                }}
+              >
+                <div
+                  style={{
+                    backgroundColor: 'rgba(72,187,120,0.15)',
+                    border: '1px solid rgba(72,187,120,0.3)',
+                    padding: '12px',
+                    borderRadius: '6px',
+                  }}
+                >
+                  <div style={{ fontSize: '11px', color: '#a0aec0' }}>GROWTH OPTIMIZATION</div>
+                  <div style={{ fontWeight: 800, fontSize: '14px', color: '#68d391' }}>
+                    ACTIVE (+50%)
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    backgroundColor: 'rgba(183,148,244,0.15)',
+                    border: '1px solid rgba(183,148,244,0.3)',
+                    padding: '12px',
+                    borderRadius: '6px',
+                  }}
+                >
+                  <div style={{ fontSize: '11px', color: '#a0aec0' }}>DATABASE</div>
+                  <div style={{ fontWeight: 800, fontSize: '14px', color: '#b794f4' }}>
+                    CONNECTED
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    backgroundColor: 'rgba(99,179,237,0.15)',
+                    border: '1px solid rgba(99,179,237,0.3)',
+                    padding: '12px',
+                    borderRadius: '6px',
+                  }}
+                >
+                  <div style={{ fontSize: '11px', color: '#a0aec0' }}>CONTROLLER</div>
+                  <div style={{ fontWeight: 800, fontSize: '14px', color: '#63b3ed' }}>HEALTHY</div>
+                </div>
+              </div>
+
+              {/* Active Optimization Banner */}
+              <div
+                style={{
+                  padding: '14px 18px',
+                  backgroundColor: 'rgba(72,187,120,0.15)',
+                  border: '1px solid #48bb78',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                }}
+              >
+                <CheckCircle2 size={20} color="#48bb78" />
+                <div style={{ fontSize: '12px', color: '#9ae6b4', lineHeight: 1.5 }}>
+                  <strong>Photosynthetic Acceleration Engaged:</strong> Crops across the grove grow
+                  at 150% speed. Microclimate sensors continuously persist environmental logs to
+                  PostgreSQL.
                 </div>
               </div>
             </div>
+          ) : httpResponse.statusCode === 502 ? (
+            /* SCENARIO 2B: HTTP 502 Bad Gateway Error (Failure Scenario - Section 20 & 21) */
+            <div
+              style={{
+                width: '100%',
+                maxWidth: '620px',
+                backgroundColor: '#07100d',
+                padding: '36px',
+                borderRadius: '10px',
+                border: '1px solid rgba(229,62,62,0.45)',
+                boxShadow: '0 8px 30px rgba(0,0,0,0.75)',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  marginBottom: '16px',
+                }}
+              >
+                <AlertTriangle size={36} color="#fc8181" />
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '20px', color: '#fed7d7' }}>502 Bad Gateway</h2>
+                  <span
+                    style={{
+                      color: '#feb2b2',
+                      fontSize: '13px',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    greenhouse.local:4000: Upstream Database Error
+                  </span>
+                </div>
+              </div>
+
+              <p style={{ color: '#cbd5e0', fontSize: '13px', lineHeight: 1.6 }}>
+                The Greenhouse Controller application container started, but failed to connect to
+                the upstream PostgreSQL database service at{' '}
+                <code style={{ color: '#ecc94b' }}>greenhouse-db:5432</code>.
+              </p>
+
+              <div
+                style={{
+                  backgroundColor: '#0a1813',
+                  padding: '16px',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(214,158,46,0.25)',
+                  margin: '20px 0',
+                }}
+              >
+                <div
+                  style={{
+                    color: '#ecc94b',
+                    fontWeight: 700,
+                    fontSize: '12px',
+                    marginBottom: '8px',
+                  }}
+                >
+                  DIAGNOSTIC WORKFLOW (Phase 3):
+                </div>
+                <ul
+                  style={{
+                    margin: 0,
+                    paddingLeft: '20px',
+                    fontSize: '12px',
+                    color: '#cbd5e0',
+                    lineHeight: 1.8,
+                  }}
+                >
+                  <li>
+                    Check container health: <code style={{ color: '#68d391' }}>docker ps</code>
+                  </li>
+                  <li>
+                    Inspect failure logs:{' '}
+                    <code style={{ color: '#68d391' }}>docker logs greenhouse-controller</code>
+                  </li>
+                  <li>
+                    Inspect environment variables:{' '}
+                    <code style={{ color: '#68d391' }}>docker inspect greenhouse-controller</code>
+                  </li>
+                  <li>
+                    Check database service:{' '}
+                    <code style={{ color: '#68d391' }}>docker compose ps</code>
+                  </li>
+                </ul>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  type="button"
+                  className="btn-solarpunk btn-gold"
+                  onClick={() => setActiveWindow('terminal')}
+                  style={{ padding: '8px 16px', fontSize: '12px' }}
+                >
+                  <Terminal size={15} /> Troubleshoot in Terminal
+                </button>
+                <button
+                  type="button"
+                  className="btn-solarpunk"
+                  onClick={handleRefresh}
+                  style={{ padding: '8px 16px', fontSize: '12px' }}
+                >
+                  <RefreshCw size={14} /> Try Again
+                </button>
+              </div>
+
+              <div
+                style={{
+                  marginTop: '20px',
+                  fontSize: '11px',
+                  color: '#718096',
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >
+                HTTP_502_BAD_GATEWAY • DATABASE_AUTHENTICATION_FAILURE
+              </div>
+            </div>
           ) : (
+            /* SCENARIO 2C: Connection Refused Error (Container not listening) */
             <div
               style={{
                 width: '100%',
@@ -729,21 +961,41 @@ export const BrowserWindow: React.FC = () => {
                 greenhouse.local refused to connect
               </h2>
               <p style={{ color: '#cbd5e0', fontSize: '13px' }}>
-                The greenhouse container is not listening on port 4000. Start it in the terminal
-                using{' '}
+                The greenhouse container is not listening on port 4000. Start the stack in the
+                terminal using <code style={{ color: '#68d391' }}>docker compose up</code> or{' '}
                 <code style={{ color: '#68d391' }}>
-                  docker run -p 4000:4000 solar-grove/greenhouse-controller
+                  docker run -p 4000:4000 solar-grove/greenhouse-controller:1.0
                 </code>
                 .
               </p>
-              <button
-                type="button"
-                className="btn-solarpunk btn-gold"
-                onClick={() => setActiveWindow('terminal')}
-                style={{ padding: '8px 16px', fontSize: '12px' }}
+              <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                <button
+                  type="button"
+                  className="btn-solarpunk btn-gold"
+                  onClick={() => setActiveWindow('terminal')}
+                  style={{ padding: '8px 16px', fontSize: '12px' }}
+                >
+                  <Terminal size={15} /> Open Terminal
+                </button>
+                <button
+                  type="button"
+                  className="btn-solarpunk"
+                  onClick={handleRefresh}
+                  style={{ padding: '8px 16px', fontSize: '12px' }}
+                >
+                  <RefreshCw size={14} /> Try Again
+                </button>
+              </div>
+              <div
+                style={{
+                  marginTop: '20px',
+                  fontSize: '11px',
+                  color: '#718096',
+                  fontFamily: 'var(--font-mono)',
+                }}
               >
-                <Terminal size={15} /> Open Terminal
-              </button>
+                ERR_CONNECTION_REFUSED
+              </div>
             </div>
           ))}
 

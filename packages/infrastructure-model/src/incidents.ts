@@ -96,6 +96,42 @@ export class IncidentEngine {
           suggestedCommand: 'df -h',
         };
         break;
+
+      case 'greenhouse-auth-failure':
+        incident = {
+          id,
+          type,
+          title: 'Greenhouse Controller Unavailable',
+          description:
+            'The greenhouse controller cannot provide growth optimization. The database appears operational. Investigate the application infrastructure.',
+          affectedBuildingId: buildingId,
+          affectedServiceName: serviceName,
+          severity: 'high',
+          resolved: false,
+          detectedAt: Date.now(),
+          productionPenaltyPercent: 0,
+          remediationHint:
+            'The container is running in an unhealthy state. Query container status (docker ps) and logs (docker logs greenhouse-controller).',
+          suggestedCommand: `docker logs ${serviceName}`,
+        };
+        break;
+
+      case 'container-crash':
+        incident = {
+          id,
+          type,
+          title: 'Container Exited Unexpectedly',
+          description: `${serviceName} container terminated with a non-zero exit code.`,
+          affectedBuildingId: buildingId,
+          affectedServiceName: serviceName,
+          severity: 'high',
+          resolved: false,
+          detectedAt: Date.now(),
+          productionPenaltyPercent: 25,
+          remediationHint: 'Inspect container crash logs with `docker logs`.',
+          suggestedCommand: `docker logs ${serviceName}`,
+        };
+        break;
     }
 
     this.activeIncidents.set(id, incident);

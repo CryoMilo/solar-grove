@@ -178,10 +178,10 @@ export const App: React.FC = () => {
                     letterSpacing: '0.04em',
                   }}
                 >
-                  ⚠ IRRIGATION STATION
+                  ⚠ {activeIncidents[0].title.toUpperCase()}
                 </div>
                 <div style={{ fontSize: '12px', color: '#feb2b2' }}>
-                  Automatic irrigation has stopped. Crop production is being affected.
+                  {activeIncidents[0].description}
                 </div>
               </div>
               <button
@@ -348,7 +348,7 @@ export const App: React.FC = () => {
               onClick={() => startPlacement('verdant-glasshouse')}
               style={{ padding: '7px 14px', fontSize: '12px' }}
             >
-              <Cpu size={15} color="#48bb78" /> Build Glasshouse (1000 G)
+              <Cpu size={15} color="#48bb78" /> Build Verdant Glasshouse (150 G)
             </button>
 
             <div style={{ width: '1px', height: '24px', background: 'rgba(214,158,46,0.3)' }} />

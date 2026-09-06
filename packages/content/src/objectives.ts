@@ -154,5 +154,121 @@ export const OBJECTIVES: ProgressionObjective[] = [
     ],
     completed: false,
     rewardGold: 200,
+    unlocksBlueprintId: 'verdant-glasshouse',
+  },
+  {
+    id: 'obj-9-build-glasshouse',
+    index: 9,
+    title: 'Goal 9 — Build Verdant Glasshouse',
+    solarpunkTitle: '🌿 Controlled Growth Habitat',
+    description:
+      'Purchase and place the Verdant Glasshouse on the farm grid (150 G). It provides climate regulation but requires containerized infrastructure.',
+    requirements: [
+      {
+        type: 'build',
+        description: 'Construct Verdant Glasshouse (150 G)',
+        target: 1,
+        current: 0,
+        satisfied: false,
+        targetBuildingType: 'verdant-glasshouse',
+      },
+    ],
+    completed: false,
+    rewardGold: 50,
+  },
+  {
+    id: 'obj-10-pull-docker-images',
+    index: 10,
+    title: 'Goal 10 — Pull Docker Images',
+    solarpunkTitle: '📦 Layered Blueprints',
+    description:
+      'Open the Terminal and pull both the application and database images: `docker pull solar-grove/greenhouse-controller:1.0` and `docker pull postgres:16`.',
+    requirements: [
+      {
+        type: 'docker-pull',
+        description: 'Pull greenhouse-controller and postgres:16 images',
+        target: 2,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 75,
+  },
+  {
+    id: 'obj-11-docker-compose-up',
+    index: 11,
+    title: 'Goal 11 — Launch Container Stack',
+    solarpunkTitle: '🧩 Stack Orchestration',
+    description:
+      'Execute `docker compose up` to create `greenhouse-network` and launch both `greenhouse-db` and `greenhouse-controller`.',
+    requirements: [
+      {
+        type: 'docker-compose',
+        description: 'Launch application stack via docker compose up',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 100,
+  },
+  {
+    id: 'obj-12-diagnose-failure',
+    index: 12,
+    title: 'Goal 12 — Diagnose Controller Failure',
+    solarpunkTitle: '🔍 Log & Config Triage',
+    description:
+      'The controller is unhealthy. Inspect running status with `docker ps`, inspect logs with `docker logs greenhouse-controller`, and check environment variables with `docker inspect greenhouse-controller`.',
+    requirements: [
+      {
+        type: 'docker-diagnose',
+        description: 'Inspect logs and environment to identify bad DATABASE_URL',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 100,
+  },
+  {
+    id: 'obj-13-recover-controller',
+    index: 13,
+    title: 'Goal 13 — Correct Environment & Recover',
+    solarpunkTitle: '⚡ Environmental Synthesis',
+    description:
+      'Provide the correct password in DATABASE_URL (`postgresql://greenhouse:greenhouse@greenhouse-db:5432/greenhouse`) and restart or run the container so both containers report HEALTHY.',
+    requirements: [
+      {
+        type: 'greenhouse-healthy',
+        description: 'Recover greenhouse-controller with valid DATABASE_URL',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 150,
+  },
+  {
+    id: 'obj-14-verify-greenhouse-browser',
+    index: 14,
+    title: 'Goal 14 — Engage Accelerated Photosynthesis',
+    solarpunkTitle: '☀️ Hyper-Growth Active',
+    description:
+      'Open the simulated Browser at http://greenhouse.local:4000 to verify connected telemetry. Growth Optimization is now boosting crop growth by +50%!',
+    requirements: [
+      {
+        type: 'greenhouse-browser',
+        description: 'Verify operational status at http://greenhouse.local:4000',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 200,
   },
 ];

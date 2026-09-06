@@ -21,7 +21,12 @@ export interface ObjectiveRequirement {
     | 'irrigate'
     | 'deploy'
     | 'incident-resolved'
-    | 'uptime';
+    | 'uptime'
+    | 'docker-pull'
+    | 'docker-compose'
+    | 'docker-diagnose'
+    | 'greenhouse-healthy'
+    | 'greenhouse-browser';
   description: string;
   target: number;
   current: number;

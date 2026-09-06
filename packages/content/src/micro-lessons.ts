@@ -230,4 +230,76 @@ export const MICRO_LESSONS: Record<CompetencyId, MicroLesson> = {
     whyFarmNeedsIt:
       'Receive instant alerts when irrigation pump memory leaks or disk space runs low.',
   },
+  'linux.env': {
+    id: 'linux.env',
+    title: '🌱 Environment Variables',
+    category: 'linux',
+    readTimeSeconds: 50,
+    summary:
+      'Environment variables configure applications externally without hardcoding secrets in code.',
+    explanation:
+      'Twelve-Factor applications store config in environment variables. Settings like DATABASE_URL, PORT, and NODE_ENV are injected at runtime, allowing the same container image to run in development, testing, and production.',
+    suggestedCommand: 'env',
+    commandExplanation: 'Prints all active environment variables in the current session.',
+    whyFarmNeedsIt:
+      'The Greenhouse Controller needs DATABASE_URL and PORT configured so it knows how to authenticate with PostgreSQL.',
+  },
+  'containers.compose': {
+    id: 'containers.compose',
+    title: '🎼 Multi-Container Orchestration with Docker Compose',
+    category: 'containers',
+    readTimeSeconds: 60,
+    summary:
+      'Docker Compose defines and runs multi-container Docker applications from a single YAML file.',
+    explanation:
+      'Instead of starting databases and backend services with separate, error-prone `docker run` flags, Docker Compose links services, virtual networks, and environment variables declaratively in `docker-compose.yml`.',
+    suggestedCommand: 'docker compose up -d',
+    commandExplanation: 'Builds, (re)creates, and starts all services in the background.',
+    whyFarmNeedsIt:
+      'The Verdant Glasshouse requires both PostgreSQL and the greenhouse-controller running together on an isolated network.',
+  },
+  'containers.logs': {
+    id: 'containers.logs',
+    title: '📜 Container Logging & Triage',
+    category: 'containers',
+    readTimeSeconds: 50,
+    summary: 'Container logs capture stdout and stderr streams emitted by containerized processes.',
+    explanation:
+      'When a container fails or returns 502 Bad Gateway, inspecting its logs reveals uncaught exceptions, stack traces, and database authentication rejections.',
+    suggestedCommand: 'docker logs greenhouse-controller',
+    commandExplanation:
+      'Fetches stdout and stderr streams from the greenhouse-controller container.',
+    whyFarmNeedsIt:
+      'Diagnose why the Greenhouse Controller is failing health checks without guessing.',
+  },
+  'containers.health': {
+    id: 'containers.health',
+    title: '🩺 Container Health Checks',
+    category: 'containers',
+    readTimeSeconds: 55,
+    summary:
+      'Health checks verify whether a running container is actually healthy and ready to serve traffic.',
+    explanation:
+      'A container process can be active while its internal logic is broken or disconnected from backing services. Health checks periodically query an endpoint (like `/health`) to verify genuine readiness.',
+    suggestedCommand: 'docker ps',
+    commandExplanation:
+      'Displays container status alongside health state: (healthy), (unhealthy), or (starting).',
+    whyFarmNeedsIt:
+      'Prevents routing agricultural automation commands to broken containers and triggers incident alarms.',
+  },
+  'databases.connection': {
+    id: 'databases.connection',
+    title: '🔌 Database Connection Strings & Authentication',
+    category: 'databases',
+    readTimeSeconds: 60,
+    summary:
+      'Connection strings format protocol, user, credentials, host, port, and database name into a unified URI.',
+    explanation:
+      'A PostgreSQL connection string follows the format `postgresql://<user>:<password>@<host>:<port>/<dbname>`. If credentials do not match the database instance, connections are rejected with code 28P01 (invalid password).',
+    suggestedCommand: 'docker inspect greenhouse-controller',
+    commandExplanation:
+      'Inspects container configuration, including injected environment variables.',
+    whyFarmNeedsIt:
+      'The greenhouse controller needs the correct database password in DATABASE_URL to record crop telemetry.',
+  },
 };

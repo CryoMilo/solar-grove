@@ -102,6 +102,7 @@ const initialKnowledge: PlayerKnowledgeMap = {
   'linux.processes': { status: 'UNKNOWN', timesUsed: 0 },
   'linux.services': { status: 'UNKNOWN', timesUsed: 0 },
   'linux.permissions': { status: 'UNKNOWN', timesUsed: 0 },
+  'linux.env': { status: 'UNKNOWN', timesUsed: 0 },
   'networking.ip': { status: 'PRACTICED', timesUsed: 1 },
   'networking.ports': { status: 'UNKNOWN', timesUsed: 0 },
   'networking.http': { status: 'UNKNOWN', timesUsed: 0 },
@@ -110,8 +111,12 @@ const initialKnowledge: PlayerKnowledgeMap = {
   'containers.images': { status: 'UNKNOWN', timesUsed: 0 },
   'containers.volumes': { status: 'UNKNOWN', timesUsed: 0 },
   'containers.networking': { status: 'UNKNOWN', timesUsed: 0 },
+  'containers.compose': { status: 'UNKNOWN', timesUsed: 0 },
+  'containers.logs': { status: 'UNKNOWN', timesUsed: 0 },
+  'containers.health': { status: 'UNKNOWN', timesUsed: 0 },
   'databases.sql': { status: 'UNKNOWN', timesUsed: 0 },
   'databases.postgresql': { status: 'UNKNOWN', timesUsed: 0 },
+  'databases.connection': { status: 'UNKNOWN', timesUsed: 0 },
   'databases.backups': { status: 'UNKNOWN', timesUsed: 0 },
   'cloud.compute': { status: 'UNKNOWN', timesUsed: 0 },
   'cloud.storage': { status: 'UNKNOWN', timesUsed: 0 },
@@ -392,8 +397,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const updatedObjectives = objectives.map((obj) => {
       const reqs = obj.requirements.map((req) => {
         if (req.type === 'build') {
-          req.current += 1;
-          if (req.current >= req.target) req.satisfied = true;
+          if (!req.targetBuildingType || req.targetBuildingType === type) {
+            req.current += 1;
+            if (req.current >= req.target) req.satisfied = true;
+          }
         }
         return req;
       });
@@ -414,9 +421,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       placementMode: { active: false, buildingType: null },
     });
 
-    // Automatically trigger discovery for Services & Ports
-    get().discoverConcept('linux.services');
-    get().discoverConcept('networking.ports');
+    if (type === 'verdant-glasshouse') {
+      get().discoverConcept('containers.docker');
+      get().discoverConcept('containers.images');
+      get().discoverConcept('databases.postgresql');
+    } else {
+      get().discoverConcept('linux.services');
+      get().discoverConcept('networking.ports');
+    }
 
     return {
       success: true,
@@ -455,6 +467,30 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (res.statusCode === 200) {
       practiceConcept('networking.http');
 
+      // If user navigated to greenhouse.local:4000 successfully
+      if (url.includes('greenhouse.local') || url.includes(':4000')) {
+        practiceConcept('databases.postgresql');
+        practiceConcept('databases.connection');
+        practiceConcept('containers.health');
+
+        // Fulfill Objective #14 (greenhouse-browser)
+        const updatedObjectives = objectives.map((obj) => {
+          const reqs = obj.requirements.map((req) => {
+            if (req.type === 'greenhouse-browser') {
+              req.current = 1;
+              req.satisfied = true;
+            }
+            return req;
+          });
+          return {
+            ...obj,
+            requirements: reqs,
+            completed: reqs.every((r) => r.satisfied),
+          };
+        });
+        set({ objectives: updatedObjectives });
+      }
+
       // If user started irrigation via HTTP POST, fulfill objective #6 (irrigate)
       if (
         options.method === 'POST' &&
@@ -483,6 +519,32 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   triggerIncident: (type = 'process-crash') => {
     const { incidentEngine, serviceManager, buildings } = get();
+
+    if (type === 'greenhouse-auth-failure') {
+      const ghBuilding = buildings.find((b) => b.type === 'verdant-glasshouse') || buildings[0];
+      const buildingId = ghBuilding ? ghBuilding.id : 'bld-gh-1';
+      const serviceName = 'greenhouse-controller';
+
+      incidentEngine.triggerIncident(type, buildingId, serviceName);
+
+      const updatedBuildings = buildings.map((b) => {
+        if (b.type === 'verdant-glasshouse') {
+          return {
+            ...b,
+            status: 'failed' as const,
+            softwareStatus: 'UNHEALTHY' as const,
+          };
+        }
+        return b;
+      });
+
+      set({
+        activeIncidents: incidentEngine.getActiveIncidents(),
+        buildings: updatedBuildings,
+      });
+      return;
+    }
+
     const targetBuilding = buildings.find((b) => b.type === 'helio-pump') || buildings[0];
     const buildingId = targetBuilding ? targetBuilding.id : 'bld-helio-pump-1';
     const serviceName = 'irrigation-controller';
@@ -514,6 +576,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!inc) return;
 
     incidentEngine.resolveIncident(id);
+
+    if (inc.affectedServiceName === 'greenhouse-controller') {
+      serviceManager.setGreenhouseDbPassword('greenhouse');
+      const updatedBuildings = buildings.map((b) => {
+        if (b.type === 'verdant-glasshouse') {
+          return {
+            ...b,
+            status: 'healthy' as const,
+            softwareStatus: 'HEALTHY' as const,
+          };
+        }
+        return b;
+      });
+      set({
+        farmState: { ...farmState, gold: farmState.gold + 100 },
+        activeIncidents: incidentEngine.getActiveIncidents(),
+        buildings: updatedBuildings,
+      });
+      return;
+    }
+
     serviceManager.startService(inc.affectedServiceName);
 
     const updatedBuildings = buildings.map((b) => {
@@ -542,6 +625,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       commandEngine,
       learnCompetency,
       practiceConcept,
+      discoverConcept,
       serviceManager,
       incidentEngine,
       buildings,
@@ -558,6 +642,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
       practiceConcept('networking.ports');
     } else if (lower.startsWith('curl')) {
       practiceConcept('networking.http');
+    } else if (lower.startsWith('docker pull')) {
+      practiceConcept('containers.images');
+    } else if (lower.startsWith('docker run')) {
+      practiceConcept('containers.docker');
+    } else if (lower.startsWith('docker compose') || lower.startsWith('docker-compose')) {
+      practiceConcept('containers.compose');
+    } else if (lower.startsWith('docker logs')) {
+      practiceConcept('containers.logs');
+    } else if (lower.startsWith('docker inspect')) {
+      practiceConcept('linux.env');
+    } else if (lower.startsWith('docker network')) {
+      practiceConcept('containers.networking');
+    } else if (lower.startsWith('env')) {
+      practiceConcept('linux.env');
     }
 
     const result = await commandEngine.execute(cmd);
@@ -568,7 +666,148 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     let extraOutput = '';
 
-    // Check if command resolved any incidents
+    // 1. Check Docker Pull objective (#10)
+    if (
+      serviceManager.hasLocalImage('solar-grove/greenhouse-controller:1.0') &&
+      serviceManager.hasLocalImage('postgres:16')
+    ) {
+      const updatedObjectives = objectives.map((obj) => {
+        const reqs = obj.requirements.map((req) => {
+          if (req.type === 'docker-pull') {
+            req.current = 2;
+            req.satisfied = true;
+          }
+          return req;
+        });
+        return {
+          ...obj,
+          requirements: reqs,
+          completed: reqs.every((r) => r.satisfied),
+        };
+      });
+      set({ objectives: updatedObjectives });
+    }
+
+    // 2. Check Docker Compose Launch objective (#11) & trigger initial failure
+    if (lower.includes('compose up') || lower.includes('compose start')) {
+      const ghContainer = serviceManager.findContainer('greenhouse-controller');
+      if (ghContainer && ghContainer.health === 'UNHEALTHY') {
+        // Trigger initial failure incident (wrong password)
+        const ghBuilding = buildings.find((b) => b.type === 'verdant-glasshouse') || buildings[0];
+        const buildingId = ghBuilding ? ghBuilding.id : 'bld-gh-1';
+        incidentEngine.triggerIncident(
+          'greenhouse-auth-failure',
+          buildingId,
+          'greenhouse-controller'
+        );
+
+        const updatedBuildings = buildings.map((b) => {
+          if (b.type === 'verdant-glasshouse') {
+            return {
+              ...b,
+              status: 'failed' as const,
+              softwareStatus: 'UNHEALTHY' as const,
+            };
+          }
+          return b;
+        });
+
+        // Fulfill Objective #11 (docker-compose)
+        const updatedObjectives = objectives.map((obj) => {
+          const reqs = obj.requirements.map((req) => {
+            if (req.type === 'docker-compose') {
+              req.current = 1;
+              req.satisfied = true;
+            }
+            return req;
+          });
+          return {
+            ...obj,
+            requirements: reqs,
+            completed: reqs.every((r) => r.satisfied),
+          };
+        });
+
+        set({
+          activeIncidents: incidentEngine.getActiveIncidents(),
+          buildings: updatedBuildings,
+          objectives: updatedObjectives,
+        });
+
+        discoverConcept('containers.health');
+        discoverConcept('containers.logs');
+      }
+    }
+
+    // 3. Check Diagnosis objective (#12)
+    if (
+      lower.includes('logs greenhouse-controller') ||
+      lower.includes('inspect greenhouse-controller') ||
+      lower === 'docker ps'
+    ) {
+      const updatedObjectives = objectives.map((obj) => {
+        const reqs = obj.requirements.map((req) => {
+          if (req.type === 'docker-diagnose') {
+            req.current = 1;
+            req.satisfied = true;
+          }
+          return req;
+        });
+        return {
+          ...obj,
+          requirements: reqs,
+          completed: reqs.every((r) => r.satisfied),
+        };
+      });
+      set({ objectives: updatedObjectives });
+    }
+
+    // 4. Check Container Recovery & Incident Resolution (#13)
+    const ghContainer = serviceManager.findContainer('greenhouse-controller');
+    if (ghContainer && ghContainer.status === 'RUNNING' && ghContainer.health === 'HEALTHY') {
+      const resolved = incidentEngine.resolveIncidentsForService('greenhouse-controller');
+      if (resolved.length > 0) {
+        extraOutput +=
+          '\n\x1b[38;2;72;187;120m[GREENHOUSE CONTROLLER HEALTHY]\x1b[0m PostgreSQL linked. Accelerated Photosynthesis ACTIVE (+50% crop speed)!\n';
+
+        const updatedBuildings = buildings.map((b) => {
+          if (b.type === 'verdant-glasshouse') {
+            return {
+              ...b,
+              status: 'healthy' as const,
+              softwareStatus: 'HEALTHY' as const,
+            };
+          }
+          return b;
+        });
+
+        const updatedObjectives = objectives.map((obj) => {
+          const reqs = obj.requirements.map((req) => {
+            if (req.type === 'greenhouse-healthy') {
+              req.current = 1;
+              req.satisfied = true;
+            }
+            return req;
+          });
+          return {
+            ...obj,
+            requirements: reqs,
+            completed: reqs.every((r) => r.satisfied),
+          };
+        });
+
+        practiceConcept('databases.connection');
+        practiceConcept('containers.health');
+
+        set({
+          activeIncidents: incidentEngine.getActiveIncidents(),
+          buildings: updatedBuildings,
+          objectives: updatedObjectives,
+        });
+      }
+    }
+
+    // 5. Check if command resolved native service incidents (Phase 2)
     if (result.affectedService) {
       const s = serviceManager.getService(result.affectedService);
       if (s?.status === 'running') {
@@ -648,6 +887,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       serviceManager.isIrrigationActivelyPumping() &&
       buildings.some((b) => b.type === 'helio-pump' && b.status === 'healthy');
 
+    // 2. Check if Verdant Glasshouse is healthy & growth optimization is active
+    const isGreenhouseOptimized =
+      serviceManager.isGreenhouseOptimized() &&
+      buildings.some((b) => b.type === 'verdant-glasshouse' && b.status === 'healthy');
+
     // Sync buildings status with service manager
     for (const b of buildings) {
       if (b.type === 'helio-pump') {
@@ -665,25 +909,43 @@ export const useGameStore = create<GameStore>((set, get) => ({
           b.softwareStatus = s?.deploymentStatus || 'NOT_DEPLOYED';
           b.irrigationActive = false;
         }
+      } else if (b.type === 'verdant-glasshouse') {
+        const c = serviceManager.findContainer('greenhouse-controller');
+        if (c?.status === 'RUNNING' && c.health === 'HEALTHY') {
+          b.status = 'healthy';
+          b.softwareStatus = 'HEALTHY';
+        } else if (c?.status === 'RUNNING' && c.health === 'UNHEALTHY') {
+          b.status = 'failed';
+          b.softwareStatus = 'UNHEALTHY';
+        } else if (c?.status === 'STOPPED') {
+          b.status = 'offline';
+          b.softwareStatus = 'STOPPED';
+        } else {
+          b.status = 'offline';
+          b.softwareStatus = 'NOT_DEPLOYED';
+        }
       }
     }
 
-    // 2. Water & Power consumption / generation
+    // 3. Water & Power consumption / generation
     let waterChange = 0;
     let powerChange = 0;
 
     if (isActivelyIrrigating) {
-      waterChange = -2; // Irrigation consumes 2 L / sec
-      powerChange = -1; // Consumes 1 kWh / sec
+      waterChange -= 2; // Irrigation consumes 2 L / sec
+      powerChange -= 1; // Consumes 1 kWh / sec
     } else {
-      // Natural groundwater seepage recharge
-      waterChange = +1;
+      waterChange += 1; // Natural groundwater recharge
+    }
+
+    if (isGreenhouseOptimized) {
+      powerChange -= 1; // Climate aerators consume power
     }
 
     const newWater = Math.max(0, Math.min(farmState.maxWater, farmState.water + waterChange));
     const newPower = Math.max(0, Math.min(farmState.maxPower, farmState.power + powerChange));
 
-    // 3. Crop Growth & Hydration
+    // 4. Crop Growth & Hydration
     const updatedCrops = farmState.crops.map((crop) => {
       if (crop.stage === 'mature') return crop;
 
@@ -693,6 +955,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       let growthRate = 1 / def.growthDurationSeconds;
       if (crop.hydration >= 50) growthRate *= 1.25;
       if (crop.hydration >= 80) growthRate *= 1.4;
+
+      // Section 24: Phase 3 Greenhouse accelerated photosynthesis (+50% growth rate)
+      if (isGreenhouseOptimized) {
+        growthRate *= 1.5;
+      }
 
       const newProgress = Math.min(1.0, crop.growthProgress + growthRate);
       let newStage: CropStage = crop.stage;

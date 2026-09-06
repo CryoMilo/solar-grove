@@ -59,8 +59,10 @@ export class CommandEngine {
         '  top                    Display dynamic real-time process list',
         '  systemctl <cmd> <unit> Control the systemd system and service manager',
         '                         (commands: status, start, stop, restart)',
-        '  docker <cmd> [args]    Manage Docker containers and images',
-        '                         (commands: ps, images, run, stop, logs)',
+        '  docker <cmd> [args]    Manage Docker containers, images, and networks',
+        '                         (commands: pull, images, run, ps, stop, logs, inspect, network)',
+        '  docker compose <cmd>   Multi-container orchestration (up, down, ps, logs)',
+        '  env                    Display session and container environment variables',
         '  curl <url>             Transfer data from or to a server / test HTTP',
         '  ping <host>            Send ICMP ECHO_REQUEST to network hosts',
         '  ls [path]              List directory contents',
@@ -216,25 +218,164 @@ export class CommandEngine {
     // DOCKER
     this.register('docker', (args, sm) => {
       if (args.length === 0) {
-        return {
-          stdout: 'Usage: docker [ps|images|run|stop|logs]\r\n',
-          exitCode: 1,
-        };
+        const usage = [
+          'Usage:  docker [OPTIONS] COMMAND',
+          '',
+          'A self-sufficient runtime for containers',
+          '',
+          'Management Commands:',
+          '  compose     Docker Compose orchestration (up, down, ps, logs)',
+          '  network     Manage networks (ls, inspect)',
+          '',
+          'Commands:',
+          '  pull        Download an image from a registry',
+          '  images      List images',
+          '  run         Create and run a new container from an image',
+          '  ps          List containers',
+          '  stop        Stop one or more running containers',
+          '  start       Start one or more stopped containers',
+          '  restart     Restart one or more containers',
+          '  logs        Fetch the logs of a container',
+          '  inspect     Return low-level information on Docker objects',
+          '',
+        ].join('\r\n');
+        return { stdout: usage, exitCode: 0 };
       }
 
       const sub = args[0].toLowerCase();
 
-      if (sub === 'ps') {
-        const containers = sm.getAllContainers();
+      // DOCKER PULL
+      if (sub === 'pull') {
+        const imageArg = args[1];
+        if (!imageArg) {
+          return {
+            stdout: '"docker pull" requires exactly 1 argument.\r\nSee \'docker pull --help\'.\r\n',
+            exitCode: 1,
+          };
+        }
+        const res = sm.pullImage(imageArg);
+        return {
+          stdout: res.output,
+          exitCode: res.success ? 0 : 1,
+          unlockedCompetency: res.success ? 'containers.images' : undefined,
+        };
+      }
+
+      // DOCKER IMAGES
+      if (sub === 'images') {
+        const images = sm.getLocalImages();
         const lines = [
-          'CONTAINER ID   IMAGE                                COMMAND                  CREATED         STATUS         PORTS                    NAMES',
+          'REPOSITORY                          TAG       IMAGE ID       CREATED        SIZE',
         ];
-        for (const c of containers) {
+        for (const img of images) {
           lines.push(
-            `${c.id}    ${c.image.padEnd(35, ' ')} "/bin/sh -c 'npm s…"   2 minutes ago   Up 2 minutes   ${c.ports.padEnd(24, ' ')} ${c.name}`
+            `${img.repository.padEnd(35, ' ')} ${img.tag.padEnd(9, ' ')} ${img.id.padEnd(14, ' ')} ${img.createdAt.padEnd(14, ' ')} ${img.size}`
           );
         }
-        if (containers.length === 0) {
+        if (images.length === 0) {
+          lines.push('(no images pulled yet - use "docker pull <image>")');
+        }
+        lines.push('');
+        return {
+          stdout: lines.join('\r\n'),
+          exitCode: 0,
+          unlockedCompetency: 'containers.images',
+        };
+      }
+
+      // DOCKER RUN
+      if (sub === 'run') {
+        let containerName: string | undefined;
+        let network: string | undefined;
+        const portMappings: string[] = [];
+        const envVars: Record<string, string> = {};
+        let imageArg = '';
+
+        for (let i = 1; i < args.length; i++) {
+          const a = args[i];
+          if (a === '--name' && args[i + 1]) {
+            containerName = args[++i];
+          } else if (a.startsWith('--name=')) {
+            containerName = a.split('=')[1];
+          } else if ((a === '-p' || a === '--publish') && args[i + 1]) {
+            portMappings.push(args[++i]);
+          } else if (a.startsWith('-p=')) {
+            portMappings.push(a.split('=')[1]);
+          } else if ((a === '-e' || a === '--env') && args[i + 1]) {
+            const raw = args[++i];
+            const eqIdx = raw.indexOf('=');
+            if (eqIdx !== -1) {
+              envVars[raw.substring(0, eqIdx)] = raw.substring(eqIdx + 1);
+            }
+          } else if (a.startsWith('-e=')) {
+            const raw = a.substring(3);
+            const eqIdx = raw.indexOf('=');
+            if (eqIdx !== -1) {
+              envVars[raw.substring(0, eqIdx)] = raw.substring(eqIdx + 1);
+            }
+          } else if (a === '--network' && args[i + 1]) {
+            network = args[++i];
+          } else if (a.startsWith('--network=')) {
+            network = a.split('=')[1];
+          } else if (a === '-d' || a === '--detach') {
+            // Detached run
+          } else if (!a.startsWith('-') && !imageArg) {
+            imageArg = a;
+          }
+        }
+
+        if (!imageArg) {
+          return {
+            stdout:
+              '"docker run" requires at least 1 image argument.\r\nSee \'docker run --help\'.\r\n',
+            exitCode: 1,
+          };
+        }
+
+        const res = sm.createOrRunContainer({
+          image: imageArg,
+          name: containerName,
+          ports: portMappings,
+          environment: envVars,
+          network,
+        });
+
+        if (!res.success || !res.container) {
+          return {
+            stdout: `docker: ${res.error || 'Failed to start container.'}\r\n`,
+            exitCode: 125,
+          };
+        }
+
+        return {
+          stdout: `${res.container.id}\r\n`,
+          exitCode: 0,
+          unlockedCompetency: 'containers.docker',
+          affectedService: res.container.name,
+        };
+      }
+
+      // DOCKER PS
+      if (sub === 'ps') {
+        const containers = sm.getAllContainers();
+        const showAll = args.includes('-a') || args.includes('--all');
+        const displayed = showAll ? containers : containers.filter((c) => c.status === 'RUNNING');
+
+        const lines = [
+          'CONTAINER ID   IMAGE                                  COMMAND                  CREATED         STATUS                    PORTS                    NAMES',
+        ];
+
+        for (const c of displayed) {
+          const statusStr =
+            c.status === 'RUNNING'
+              ? `Up 2 minutes (${c.health.toLowerCase()})`
+              : 'Exited (0) 1 minute ago';
+          lines.push(
+            `${c.id.padEnd(14, ' ')} ${c.image.padEnd(38, ' ')} "${c.command.substring(0, 20).padEnd(22, ' ')}" 2 minutes ago   ${statusStr.padEnd(25, ' ')} ${c.ports.padEnd(24, ' ')} ${c.name}`
+          );
+        }
+
+        if (displayed.length === 0) {
           lines.push('(no containers currently running)');
         }
         lines.push('');
@@ -245,62 +386,212 @@ export class CommandEngine {
         };
       }
 
-      if (sub === 'images') {
-        const lines = [
-          'REPOSITORY                          TAG       IMAGE ID       CREATED        SIZE',
-          'solar-grove/greenhouse-controller   v1.2      c91f48a20de1   2 days ago     142MB',
-          'solar-grove/harvest-worker          latest    a4891fcb0019   1 week ago     98MB',
-          'postgres                            16        8df30291ba42   3 weeks ago    380MB',
-          'node                                22-slim   fa284109e201   1 month ago    195MB',
-          '',
-        ];
-        return {
-          stdout: lines.join('\r\n'),
-          exitCode: 0,
-          unlockedCompetency: 'containers.images',
-        };
-      }
-
-      if (sub === 'run') {
-        // e.g. docker run -p 8080:8080 solar-grove/greenhouse-controller
-        const container = sm.runContainer(
-          'solar-grove/greenhouse-controller:v1.2',
-          'greenhouse-api',
-          '0.0.0.0:8080->8080/tcp'
-        );
-        // Also ensure greenhouse-api service state is active
-        sm.startService('greenhouse-api');
-        return {
-          stdout: `${container.id}\r\nContainer ${container.name} started successfully.\r\n`,
-          exitCode: 0,
-          affectedService: 'greenhouse-api',
-          unlockedCompetency: 'containers.docker',
-        };
-      }
-
+      // DOCKER STOP
       if (sub === 'stop') {
         const target = args[1];
         if (!target) {
           return { stdout: 'docker stop: requires at least 1 argument\r\n', exitCode: 1 };
         }
-        sm.stopContainer(target);
-        sm.stopService(target);
-        return { stdout: `${target}\r\n`, exitCode: 0 };
+        const ok = sm.stopContainer(target);
+        if (!ok) {
+          return {
+            stdout: `Error response from daemon: No such container: ${target}\r\n`,
+            exitCode: 1,
+          };
+        }
+        return { stdout: `${target}\r\n`, exitCode: 0, affectedService: target };
       }
 
+      // DOCKER START
+      if (sub === 'start') {
+        const target = args[1];
+        if (!target) {
+          return { stdout: 'docker start: requires at least 1 argument\r\n', exitCode: 1 };
+        }
+        const ok = sm.startContainer(target);
+        if (!ok) {
+          return {
+            stdout: `Error response from daemon: No such container: ${target}\r\n`,
+            exitCode: 1,
+          };
+        }
+        return { stdout: `${target}\r\n`, exitCode: 0, affectedService: target };
+      }
+
+      // DOCKER RESTART
+      if (sub === 'restart') {
+        const target = args[1];
+        if (!target) {
+          return { stdout: 'docker restart: requires at least 1 argument\r\n', exitCode: 1 };
+        }
+        const ok = sm.restartContainer(target);
+        if (!ok) {
+          return {
+            stdout: `Error response from daemon: No such container: ${target}\r\n`,
+            exitCode: 1,
+          };
+        }
+        return { stdout: `${target}\r\n`, exitCode: 0, affectedService: target };
+      }
+
+      // DOCKER LOGS
       if (sub === 'logs') {
-        const target = args[1] || 'greenhouse-api';
-        const lines = [
-          `--- Logs for ${target} ---`,
-          '[2026-09-06 02:00:00] [greenhouse-controller] Microclimate engine v1.2 initialized',
-          '[2026-09-06 02:00:01] [greenhouse-controller] Connected to internal PostgreSQL db',
-          '[2026-09-06 02:00:02] [greenhouse-controller] Sensor arrays active. Temperature 24.5C, Humidity 68%',
-          '',
-        ];
-        return { stdout: lines.join('\r\n'), exitCode: 0 };
+        let target = '';
+        for (let i = 1; i < args.length; i++) {
+          if (!args[i].startsWith('-')) {
+            target = args[i];
+            break;
+          }
+        }
+        if (!target) {
+          return { stdout: 'docker logs: requires container name or ID\r\n', exitCode: 1 };
+        }
+        const logs = sm.getContainerLogs(target);
+        return {
+          stdout: `${logs.join('\r\n')}\r\n`,
+          exitCode: 0,
+          unlockedCompetency: 'containers.logs',
+        };
       }
 
-      return { stdout: `docker: '${sub}' is not a recognized docker command.\r\n`, exitCode: 1 };
+      // DOCKER INSPECT
+      if (sub === 'inspect') {
+        const target = args[1];
+        if (!target) {
+          return { stdout: 'docker inspect: requires container name or ID\r\n', exitCode: 1 };
+        }
+        const info = sm.inspectContainer(target);
+        if (!info) {
+          return { stdout: `Error: No such object: ${target}\r\n`, exitCode: 1 };
+        }
+        return {
+          stdout: `${JSON.stringify([info], null, 2)}\r\n`,
+          exitCode: 0,
+          unlockedCompetency: 'linux.env',
+        };
+      }
+
+      // DOCKER NETWORK
+      if (sub === 'network') {
+        const netCmd = (args[1] || 'ls').toLowerCase();
+        if (netCmd === 'ls') {
+          const networks = sm.getNetworks();
+          const lines = ['NETWORK ID     NAME                 DRIVER    SCOPE'];
+          for (const n of networks) {
+            lines.push(
+              `${n.id.padEnd(14, ' ')} ${n.name.padEnd(20, ' ')} ${n.driver.padEnd(9, ' ')} local`
+            );
+          }
+          lines.push('');
+          return {
+            stdout: lines.join('\r\n'),
+            exitCode: 0,
+            unlockedCompetency: 'containers.networking',
+          };
+        }
+        if (netCmd === 'inspect') {
+          const netName = args[2] || 'greenhouse-network';
+          const net = sm.getNetwork(netName);
+          if (!net) {
+            return { stdout: `Error: No such network: ${netName}\r\n`, exitCode: 1 };
+          }
+          const netInfo = [
+            {
+              Name: net.name,
+              Id: net.id,
+              Driver: net.driver,
+              IPAM: {
+                Config: [{ Subnet: net.subnet, Gateway: net.subnet.replace('0.0/16', '0.1') }],
+              },
+              Containers: net.containers.reduce(
+                (acc, cName, idx) => {
+                  acc[`cont-${idx}`] = { Name: cName, IPv4Address: `172.28.0.${idx + 2}/16` };
+                  return acc;
+                },
+                {} as Record<string, unknown>
+              ),
+            },
+          ];
+          return {
+            stdout: `${JSON.stringify(netInfo, null, 2)}\r\n`,
+            exitCode: 0,
+            unlockedCompetency: 'containers.networking',
+          };
+        }
+        return {
+          stdout: `docker network: unknown command '${netCmd}'. Valid: ls, inspect\r\n`,
+          exitCode: 1,
+        };
+      }
+
+      // DOCKER COMPOSE
+      if (sub === 'compose') {
+        const compCmd = (args[1] || 'ps').toLowerCase();
+        if (compCmd === 'up') {
+          const res = sm.composeUp();
+          return {
+            stdout: res.output,
+            exitCode: 0,
+            unlockedCompetency: 'containers.compose',
+            affectedService: 'greenhouse-controller',
+          };
+        }
+        if (compCmd === 'down') {
+          return {
+            stdout: sm.composeDown(),
+            exitCode: 0,
+            affectedService: 'greenhouse-controller',
+          };
+        }
+        if (compCmd === 'ps') {
+          return {
+            stdout: sm.composePs(),
+            exitCode: 0,
+            unlockedCompetency: 'containers.docker',
+          };
+        }
+        if (compCmd === 'logs') {
+          return {
+            stdout: sm.composeLogs(),
+            exitCode: 0,
+            unlockedCompetency: 'containers.logs',
+          };
+        }
+        return {
+          stdout: `docker compose: unknown command '${compCmd}'. Valid: up, down, ps, logs\r\n`,
+          exitCode: 1,
+        };
+      }
+
+      return {
+        stdout: `docker: '${sub}' is not a docker command.\r\nSee 'docker --help'.\r\n`,
+        exitCode: 1,
+      };
+    });
+
+    // DOCKER-COMPOSE (alias)
+    this.register('docker-compose', (args, sm) => {
+      return this.handlers.get('docker')!(['compose', ...args], sm);
+    });
+
+    // ENV
+    this.register('env', () => {
+      const lines = [
+        'USER=solargrv',
+        'HOME=/home/solargrv',
+        'LOGNAME=solargrv',
+        'SHELL=/bin/zsh',
+        'TERM=xterm-256color',
+        'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+        'DOCKER_HOST=unix:///var/run/docker.sock',
+        'NODE_ENV=production',
+        '',
+      ];
+      return {
+        stdout: lines.join('\r\n'),
+        exitCode: 0,
+        unlockedCompetency: 'linux.env',
+      };
     });
 
     // CURL
@@ -439,9 +730,15 @@ export class CommandEngine {
       lines.push('');
       lines.push('Containers:');
       for (const c of containers) {
-        const icon = c.status === 'running' ? '🟢' : '🔴';
+        const icon =
+          c.status === 'RUNNING' && c.health === 'HEALTHY'
+            ? '🟢'
+            : c.status === 'RUNNING'
+              ? '🟡'
+              : '🔴';
+        const healthStr = c.status === 'RUNNING' ? ` (${c.health})` : '';
         lines.push(
-          `  ${icon} ${c.name.padEnd(24, ' ')} [${c.status.toUpperCase()}] Image: ${c.image}`
+          `  ${icon} ${c.name.padEnd(24, ' ')} [${c.status}${healthStr}] Image: ${c.image}`
         );
       }
       if (containers.length === 0) {

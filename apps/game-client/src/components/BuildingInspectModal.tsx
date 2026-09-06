@@ -3,10 +3,12 @@ import {
   AlertCircle,
   CheckCircle2,
   Cpu,
+  Database,
   Droplets,
   ExternalLink,
   Globe,
   Layers,
+  Network,
   Terminal,
   X,
   Zap,
@@ -24,19 +26,35 @@ export const BuildingInspectModal: React.FC = () => {
 
   if (!building) return null;
 
-  const irrService = serviceManager.getService('irrigation-controller');
-  const telemetry = serviceManager.getIrrigationTelemetry();
-  const isRunning = irrService?.status === 'running';
-  const isCrashed = irrService?.status === 'failed';
-  const isPumping = serviceManager.isIrrigationActivelyPumping();
+  const isGlasshouse = building.type === 'verdant-glasshouse';
 
-  const softwareStatus = isRunning
+  // 1. Irrigation Station State (Phase 2)
+  const irrService = serviceManager.getService('irrigation-controller');
+  const irrTelemetry = serviceManager.getIrrigationTelemetry();
+  const isIrrRunning = irrService?.status === 'running';
+  const isIrrCrashed = irrService?.status === 'failed';
+  const isIrrPumping = serviceManager.isIrrigationActivelyPumping();
+
+  const irrSoftwareStatus = isIrrRunning
     ? 'RUNNING'
-    : isCrashed
+    : isIrrCrashed
       ? 'CRASHED'
       : irrService?.deploymentStatus || 'NOT_DEPLOYED';
 
-  const buildingStatus = isRunning ? 'HEALTHY' : isCrashed ? 'OFFLINE (ALERT)' : 'OFFLINE';
+  // 2. Verdant Glasshouse State (Phase 3 - Section 27)
+  const ghContainer = serviceManager.findContainer('greenhouse-controller');
+  const dbContainer = serviceManager.findContainer('greenhouse-db');
+  const isGhRunning = ghContainer?.status === 'RUNNING';
+  const isGhHealthy = isGhRunning && ghContainer?.health === 'HEALTHY';
+  const isGhUnhealthy = isGhRunning && ghContainer?.health === 'UNHEALTHY';
+  const isDbRunning = dbContainer?.status === 'RUNNING';
+  const isDbHealthy = isDbRunning && dbContainer?.health === 'HEALTHY';
+
+  const ghBuildingStatus = isGhHealthy
+    ? 'ONLINE'
+    : isGhUnhealthy
+      ? 'OFFLINE (DEGRADED)'
+      : 'OFFLINE';
 
   const handleOpenSoftware = () => {
     onClose();
@@ -50,9 +68,9 @@ export const BuildingInspectModal: React.FC = () => {
     togglePc(true);
   };
 
-  const handleOpenBrowser = () => {
+  const handleOpenBrowser = (url: string) => {
     onClose();
-    setBrowserUrl('http://irrigation.local:8080');
+    setBrowserUrl(url);
     setActiveWindow('browser');
     togglePc(true);
   };
@@ -74,7 +92,7 @@ export const BuildingInspectModal: React.FC = () => {
       <div
         className="glass-panel frame-solarpunk"
         style={{
-          width: '560px',
+          width: '580px',
           maxWidth: '92vw',
           padding: '24px',
           backgroundColor: '#0a1612',
@@ -113,7 +131,11 @@ export const BuildingInspectModal: React.FC = () => {
                 justifyContent: 'center',
               }}
             >
-              <Droplets size={20} color="#ecc94b" />
+              {isGlasshouse ? (
+                <Cpu size={20} color="#68d391" />
+              ) : (
+                <Droplets size={20} color="#ecc94b" />
+              )}
             </div>
             <div>
               <h2
@@ -125,10 +147,12 @@ export const BuildingInspectModal: React.FC = () => {
                   letterSpacing: '0.04em',
                 }}
               >
-                HELIO IRRIGATION STATION
+                {isGlasshouse ? 'VERDANT GLASSHOUSE' : 'HELIO IRRIGATION STATION'}
               </h2>
               <div style={{ fontSize: '11px', color: '#9ae6b4' }}>
-                Deep Aquifer Solar Pumping Array (ID: {building.id})
+                {isGlasshouse
+                  ? `Controlled Growth Habitat (ID: ${building.id})`
+                  : `Deep Aquifer Solar Pumping Array (ID: ${building.id})`}
               </div>
             </div>
           </div>
@@ -152,7 +176,7 @@ export const BuildingInspectModal: React.FC = () => {
             marginBottom: '18px',
           }}
         >
-          {/* Status */}
+          {/* Physical Status */}
           <div
             style={{
               padding: '12px',
@@ -165,12 +189,29 @@ export const BuildingInspectModal: React.FC = () => {
               PHYSICAL STATUS
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              {isRunning ? (
+              {isGlasshouse ? (
+                isGhHealthy ? (
+                  <>
+                    <CheckCircle2 size={16} color="#48bb78" />
+                    <span style={{ fontWeight: 700, color: '#48bb78' }}>ONLINE</span>
+                  </>
+                ) : isGhUnhealthy ? (
+                  <>
+                    <AlertCircle size={16} color="#ecc94b" />
+                    <span style={{ fontWeight: 700, color: '#ecc94b' }}>OFFLINE (DEGRADED)</span>
+                  </>
+                ) : (
+                  <>
+                    <Activity size={16} color="#a0aec0" />
+                    <span style={{ fontWeight: 700, color: '#a0aec0' }}>OFFLINE</span>
+                  </>
+                )
+              ) : isIrrRunning ? (
                 <>
                   <CheckCircle2 size={16} color="#48bb78" />
                   <span style={{ fontWeight: 700, color: '#48bb78' }}>HEALTHY</span>
                 </>
-              ) : isCrashed ? (
+              ) : isIrrCrashed ? (
                 <>
                   <AlertCircle size={16} color="#e53e3e" />
                   <span style={{ fontWeight: 700, color: '#e53e3e' }}>OFFLINE (CRASHED)</span>
@@ -184,7 +225,7 @@ export const BuildingInspectModal: React.FC = () => {
             </div>
           </div>
 
-          {/* Software Status */}
+          {/* Software / Container Name */}
           <div
             style={{
               padding: '12px',
@@ -194,35 +235,17 @@ export const BuildingInspectModal: React.FC = () => {
             }}
           >
             <div style={{ fontSize: '11px', color: '#a0aec0', marginBottom: '4px' }}>
-              SOFTWARE DAEMON
+              {isGlasshouse ? 'REQUIRED SOFTWARE & RUNTIME' : 'SOFTWARE DAEMON'}
             </div>
-            <div style={{ fontWeight: 700, fontSize: '13px' }}>
-              <span style={{ color: '#ecc94b' }}>Irrigation Controller</span>{' '}
-              <span
-                style={{
-                  fontSize: '11px',
-                  padding: '2px 6px',
-                  borderRadius: '4px',
-                  backgroundColor:
-                    softwareStatus === 'RUNNING'
-                      ? 'rgba(72,187,120,0.2)'
-                      : softwareStatus === 'CRASHED'
-                        ? 'rgba(229,62,62,0.2)'
-                        : 'rgba(160,174,192,0.2)',
-                  color:
-                    softwareStatus === 'RUNNING'
-                      ? '#68d391'
-                      : softwareStatus === 'CRASHED'
-                        ? '#fc8181'
-                        : '#cbd5e0',
-                }}
-              >
-                {softwareStatus}
-              </span>
+            <div style={{ fontWeight: 700, fontSize: '13px', color: '#ecc94b' }}>
+              {isGlasshouse ? 'Greenhouse Controller (Node.js 20)' : 'Irrigation Controller'}
+            </div>
+            <div style={{ fontSize: '11px', color: '#a0aec0' }}>
+              Deployment: {isGlasshouse ? 'Docker Container' : 'Bare Metal (systemd)'}
             </div>
           </div>
 
-          {/* Network */}
+          {/* Network & HTTP */}
           <div
             style={{
               padding: '12px',
@@ -235,11 +258,16 @@ export const BuildingInspectModal: React.FC = () => {
               NETWORK ENDPOINT
             </div>
             <div style={{ fontFamily: 'monospace', fontSize: '13px', color: '#63b3ed' }}>
-              http://irrigation.local:8080
+              {isGlasshouse ? 'http://greenhouse.local:4000' : 'http://irrigation.local:8080'}
             </div>
+            {isGlasshouse && (
+              <div style={{ fontSize: '11px', color: '#a0aec0' }}>
+                Docker Network: greenhouse-network
+              </div>
+            )}
           </div>
 
-          {/* Irrigation Delivery */}
+          {/* Database / Irrigation Telemetry */}
           <div
             style={{
               padding: '12px',
@@ -249,20 +277,37 @@ export const BuildingInspectModal: React.FC = () => {
             }}
           >
             <div style={{ fontSize: '11px', color: '#a0aec0', marginBottom: '4px' }}>
-              WATER DELIVERY
+              {isGlasshouse ? 'DATABASE INFRASTRUCTURE' : 'WATER DELIVERY'}
             </div>
-            <div
-              style={{
-                fontWeight: 700,
-                fontSize: '13px',
-                color: isPumping ? '#4fd1c5' : '#a0aec0',
-              }}
-            >
-              {isPumping ? '🌊 PUMPING ACTIVE (+4%/s)' : '⏸️ IDLE / STOPPED'}
-            </div>
+            {isGlasshouse ? (
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '13px', color: '#b794f4' }}>
+                  PostgreSQL :5432 ({dbContainer ? 'greenhouse-db' : 'greenhouse-db (stopped)'})
+                </div>
+                <div
+                  style={{
+                    fontSize: '11px',
+                    color: isDbHealthy ? '#68d391' : '#fc8181',
+                    fontWeight: 600,
+                  }}
+                >
+                  DB Container: {isDbHealthy ? 'HEALTHY' : 'UNAVAILABLE'}
+                </div>
+              </div>
+            ) : (
+              <div
+                style={{
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  color: isIrrPumping ? '#4fd1c5' : '#a0aec0',
+                }}
+              >
+                {isIrrPumping ? '🌊 PUMPING ACTIVE (+4%/s)' : '⏸️ IDLE / STOPPED'}
+              </div>
+            )}
           </div>
 
-          {/* Reservoir & Power */}
+          {/* Container Health / Reservoir */}
           <div
             style={{
               padding: '12px',
@@ -272,11 +317,40 @@ export const BuildingInspectModal: React.FC = () => {
             }}
           >
             <div style={{ fontSize: '11px', color: '#a0aec0', marginBottom: '4px' }}>
-              AQUIFER RESERVOIR
+              {isGlasshouse ? 'CONTAINER HEALTH' : 'AQUIFER RESERVOIR'}
             </div>
-            <div style={{ fontWeight: 700, fontSize: '13px', color: '#ecc94b' }}>
-              {telemetry.reservoirPct}% Capacity ({telemetry.soilMoisturePct}% Soil Saturation)
-            </div>
+            {isGlasshouse ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    fontWeight: 700,
+                    backgroundColor: isGhHealthy
+                      ? 'rgba(72,187,120,0.2)'
+                      : isGhUnhealthy
+                        ? 'rgba(229,62,62,0.2)'
+                        : 'rgba(160,174,192,0.2)',
+                    color: isGhHealthy ? '#68d391' : isGhUnhealthy ? '#fc8181' : '#cbd5e0',
+                  }}
+                >
+                  {isGhHealthy
+                    ? 'HEALTHY'
+                    : isGhUnhealthy
+                      ? 'UNHEALTHY (AUTH ERROR)'
+                      : 'NOT RUNNING'}
+                </span>
+                <span style={{ fontSize: '11px', color: '#a0aec0' }}>
+                  ({ghContainer?.name || 'no container'})
+                </span>
+              </div>
+            ) : (
+              <div style={{ fontWeight: 700, fontSize: '13px', color: '#ecc94b' }}>
+                {irrTelemetry.reservoirPct}% Capacity ({irrTelemetry.soilMoisturePct}% Soil
+                Saturation)
+              </div>
+            )}
           </div>
 
           {/* Production Impact */}
@@ -292,7 +366,11 @@ export const BuildingInspectModal: React.FC = () => {
               PRODUCTION IMPACT
             </div>
             <div style={{ fontWeight: 700, fontSize: '13px', color: '#48bb78' }}>
-              +40% Crop Growth Acceleration
+              {isGlasshouse
+                ? isGhHealthy
+                  ? '+50% Accelerated Photosynthesis (ACTIVE)'
+                  : 'Growth Optimization: OFFLINE'
+                : '+40% Crop Growth Acceleration'}
             </div>
           </div>
         </div>
@@ -320,7 +398,11 @@ export const BuildingInspectModal: React.FC = () => {
           <button
             type="button"
             className="btn-solarpunk btn-gold"
-            onClick={handleOpenBrowser}
+            onClick={() =>
+              handleOpenBrowser(
+                isGlasshouse ? 'http://greenhouse.local:4000' : 'http://irrigation.local:8080'
+              )
+            }
             style={{ flex: 1.2, padding: '10px', fontSize: '12px', justifyContent: 'center' }}
           >
             <Globe size={15} /> Web Console

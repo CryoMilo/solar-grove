@@ -26,8 +26,7 @@ export const BrowserWindow: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const serviceManager = useGameStore((s) => s.serviceManager);
-  const irrigationPumping = useGameStore((s) => s.irrigationPumping);
-  const setIrrigationPumping = useGameStore((s) => s.setIrrigationPumping);
+  const dispatchHttp = useGameStore((s) => s.dispatchHttp);
   const setActiveWindow = useGameStore((s) => s.setActiveWindow);
   const farmState = useGameStore((s) => s.farmState);
 
@@ -51,7 +50,11 @@ export const BrowserWindow: React.FC = () => {
     setBrowserUrl(url);
   };
 
-  // Inspect simulated target
+  // Inspect simulated target via HTTP dispatcher (PRD §16)
+  const httpResponse = dispatchHttp(browserUrl);
+  const isErrConnectionRefused =
+    httpResponse.error?.includes('ERR_CONNECTION_REFUSED') || httpResponse.statusCode === 0;
+
   const isIrrigationUrl =
     browserUrl.includes('irrigation.local') ||
     browserUrl.includes(':8080') ||
@@ -59,11 +62,19 @@ export const BrowserWindow: React.FC = () => {
   const isGreenhouseUrl = browserUrl.includes('greenhouse.local') || browserUrl.includes(':4000');
   const isDocsUrl = browserUrl.includes('docs.local');
 
-  const irrService = serviceManager.getService('irrigation-controller');
-  const isIrrRunning = irrService?.status === 'running';
+  const telemetry = serviceManager.getIrrigationTelemetry();
+  const isPumping = serviceManager.isIrrigationActivelyPumping();
+  const isIrrRunning = !isErrConnectionRefused && isIrrigationUrl;
+  const isGhRunning = !isErrConnectionRefused && isGreenhouseUrl;
 
-  const ghService = serviceManager.getService('greenhouse-api');
-  const isGhRunning = ghService?.status === 'running';
+  const handleToggleIrrigation = (start: boolean) => {
+    const endpoint = start
+      ? 'http://irrigation.local:8080/api/irrigation/start'
+      : 'http://irrigation.local:8080/api/irrigation/stop';
+    dispatchHttp(endpoint, { method: 'POST' });
+    setIsRefreshing(true);
+    setTimeout(() => setIsRefreshing(false), 200);
+  };
 
   return (
     <div
@@ -335,10 +346,10 @@ export const BrowserWindow: React.FC = () => {
                     style={{
                       fontSize: '26px',
                       fontWeight: 800,
-                      color: irrigationPumping ? '#48bb78' : '#ecc94b',
+                      color: isPumping ? '#48bb78' : '#ecc94b',
                     }}
                   >
-                    {irrigationPumping ? '88%' : '43%'}
+                    {isPumping ? '88%' : `${telemetry.soilMoisturePct}%`}
                   </div>
                   <div style={{ fontSize: '11px', color: '#718096' }}>Optimal range: 70–95%</div>
                 </div>
@@ -369,7 +380,7 @@ export const BrowserWindow: React.FC = () => {
                       color: '#ecc94b',
                     }}
                   >
-                    {irrigationPumping ? '5 / 5' : '0 / 5'}
+                    {isPumping ? `${telemetry.activeZones} / ${telemetry.maxZones}` : '0 / 5'}
                   </div>
                   <div style={{ fontSize: '11px', color: '#718096' }}>Furrow manifolds online</div>
                 </div>
@@ -414,11 +425,11 @@ export const BrowserWindow: React.FC = () => {
                   </div>
 
                   <div style={{ display: 'flex', gap: '10px' }}>
-                    {irrigationPumping ? (
+                    {isPumping ? (
                       <button
                         type="button"
                         className="btn-solarpunk"
-                        onClick={() => setIrrigationPumping(false)}
+                        onClick={() => handleToggleIrrigation(false)}
                         style={{
                           background: 'rgba(229,62,62,0.25)',
                           borderColor: '#e53e3e',
@@ -433,16 +444,16 @@ export const BrowserWindow: React.FC = () => {
                       <button
                         type="button"
                         className="btn-solarpunk btn-gold"
-                        onClick={() => setIrrigationPumping(true)}
+                        onClick={() => handleToggleIrrigation(true)}
                         style={{ padding: '8px 16px', fontSize: '13px' }}
                       >
-                        <Play size={15} /> Start Irrigation (PRD §70)
+                        <Play size={15} /> Start Irrigation
                       </button>
                     )}
                   </div>
                 </div>
 
-                {irrigationPumping && (
+                {isPumping && (
                   <div
                     style={{
                       marginTop: '12px',

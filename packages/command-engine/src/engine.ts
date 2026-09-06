@@ -75,19 +75,13 @@ export class CommandEngine {
 
     // PS
     this.register('ps', (_args, sm) => {
-      const services = sm.getAllServices();
-      const running = services.filter((s) => s.status === 'running');
+      const processes = sm.getProcesses ? sm.getProcesses() : [];
+      const lines = ['PID   USER     TTY      TIME     CMD'];
 
-      const lines = [
-        'PID   USER     TTY      TIME     CMD',
-        '    1 root     ?        00:00:04 /sbin/init systemd',
-        '  104 root     ?        00:00:01 /lib/systemd/systemd-journald',
-        '  412 system   ?        00:00:02 /usr/sbin/cron -f',
-      ];
-
-      for (const s of running) {
-        const pidStr = String(s.pid || 1000).padStart(5, ' ');
-        lines.push(`${pidStr} solargrv ?        00:00:03 ${s.command}`);
+      for (const p of processes) {
+        const pidStr = String(p.pid).padStart(5, ' ');
+        const user = p.pid < 500 ? 'root   ' : 'solargrv';
+        lines.push(`${pidStr} ${user} ?        00:00:03 ${p.command}`);
       }
 
       lines.push('');
@@ -155,13 +149,20 @@ export class CommandEngine {
       }
 
       if (sub === 'status') {
-        const activeColor = service.status === 'running' ? 'active (running)' : 'inactive (dead)';
+        let activeStatusText = 'inactive (dead)';
+        if (service.status === 'running') {
+          activeStatusText = 'active (running)';
+        } else if (service.status === 'failed') {
+          activeStatusText = 'failed (Result: exit-code)';
+        }
+
         const lines = [
           `● ${service.name}.service - ${service.description}`,
           `     Loaded: loaded (/etc/systemd/system/${service.name}.service; enabled; vendor preset: enabled)`,
-          `     Active: ${activeColor} since ${new Date().toUTCString()}`,
+          `     Active: ${activeStatusText} since ${new Date().toUTCString()}`,
+          `       Port: ${service.port} (TCP)`,
           `    Process: ${service.pid ? `${service.pid} ExecStart=${service.command}` : 'None'}`,
-          `   Main PID: ${service.pid || 'none'}`,
+          `   Main PID: ${service.pid || 'none'}${service.status === 'failed' ? ' (code=exited, status=1/FAILURE)' : ''}`,
           `      Tasks: ${service.status === 'running' ? '4' : '0'}`,
           `     Memory: ${service.memoryMb}M`,
           `        CPU: ${service.cpu}%`,
@@ -172,7 +173,7 @@ export class CommandEngine {
         ];
         return {
           stdout: lines.join('\r\n'),
-          exitCode: 0,
+          exitCode: service.status === 'failed' ? 3 : 0,
           unlockedCompetency: 'linux.services',
         };
       }
@@ -309,60 +310,45 @@ export class CommandEngine {
         return { stdout: "curl: try 'curl --help' for more information\r\n", exitCode: 2 };
       }
 
-      const isIrrigation =
-        url.includes('irrigation') ||
-        url.includes('3000') ||
-        (url.includes('8080') && !url.includes('greenhouse'));
-      const isGreenhouse = url.includes('greenhouse') || url.includes('4000');
-
-      if (isIrrigation) {
-        const irrService = sm.getService('irrigation-controller');
-        if (irrService?.status === 'running') {
+      if (sm.dispatchHttp) {
+        const res = sm.dispatchHttp(url);
+        if (res.statusCode === 200) {
+          const headerLines = Object.entries(res.headers || {}).map(([k, v]) => `${k}: ${v}`);
           return {
-            stdout: `HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nDate: ${new Date().toUTCString()}\r\n\r\n{"status":"online","service":"irrigation-controller","version":"1.4.2","reservoirPct":78,"soilMoisturePct":43,"activeZones":3}\r\n`,
-            exitCode: 0,
-            unlockedCompetency: 'networking.ports',
-          };
-        }
-        return {
-          stdout: `curl: (7) Failed to connect to ${url.replace(/^https?:\/\//, '').split('/')[0]} port 8080: Connection refused\r\n`,
-          exitCode: 7,
-          unlockedCompetency: 'networking.ports',
-        };
-      }
-
-      if (isGreenhouse) {
-        const ghService = sm.getService('greenhouse-api');
-        if (ghService?.status === 'running') {
-          return {
-            stdout:
-              'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{"status":"active","service":"greenhouse-api","version":"2.1.0","yieldMultiplier":1.4}\r\n',
+            stdout: `HTTP/1.1 200 OK\r\n${headerLines.join('\r\n')}\r\nDate: ${new Date().toUTCString()}\r\n\r\n${res.body}\r\n`,
             exitCode: 0,
             unlockedCompetency: 'networking.http',
           };
         }
+        if (res.statusCode === 0) {
+          const hostPort = url.replace(/^https?:\/\//, '').split('/')[0];
+          return {
+            stdout: `curl: (7) Failed to connect to ${hostPort}: Connection refused\r\n`,
+            exitCode: 7,
+            unlockedCompetency: 'networking.ports',
+          };
+        }
         return {
-          stdout:
-            'curl: (7) Failed to connect to greenhouse.local port 4000: Connection refused\r\n',
-          exitCode: 7,
+          stdout: `curl: (6) Could not resolve host: ${url}\r\n`,
+          exitCode: 6,
         };
       }
 
       return {
-        stdout: `curl: (6) Could not resolve host: ${url}\r\n`,
-        exitCode: 6,
+        stdout: `curl: (7) Failed to connect to ${url}: Connection refused\r\n`,
+        exitCode: 7,
       };
     });
 
     // SS / NETSTAT
     this.register('ss', (_args, sm) => {
-      const services = sm.getAllServices().filter((s) => s.status === 'running');
+      const ports = sm.getListeningPorts ? sm.getListeningPorts() : [];
       const lines = [
         'Netid  State   Recv-Q  Send-Q   Local Address:Port   Peer Address:Port  Process',
       ];
-      for (const s of services) {
+      for (const p of ports) {
         lines.push(
-          `tcp    LISTEN  0       128            0.0.0.0:${s.port}        0.0.0.0:*      users:(("${s.name}",pid=${s.pid || 1042},fd=18))`
+          `tcp    ${p.status.padEnd(7, ' ')} 0       128            ${p.address}:${p.port}        0.0.0.0:*      users:(("${p.processName}",pid=${p.pid},fd=18))`
         );
       }
       lines.push('');

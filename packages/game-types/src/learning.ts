@@ -1,4 +1,12 @@
-export type KnowledgeStatus = 'learned' | 'not-mastered' | 'not-learned' | 'locked';
+export type KnowledgeStatus =
+  | 'UNKNOWN'
+  | 'DISCOVERED'
+  | 'PRACTICED'
+  | 'COMPETENT'
+  | 'learned'
+  | 'not-mastered'
+  | 'not-learned'
+  | 'locked';
 
 export type CompetencyCategory = 'linux' | 'networking' | 'containers' | 'databases' | 'cloud';
 
@@ -21,6 +29,15 @@ export type CompetencyId =
   | 'cloud.compute'
   | 'cloud.storage'
   | 'cloud.monitoring';
+
+export interface ConceptDiscovery {
+  id: CompetencyId;
+  name: string;
+  conceptName: string;
+  summary: string;
+  details: string;
+  listenPort?: number;
+}
 
 export interface CompetencyDefinition {
   id: CompetencyId;

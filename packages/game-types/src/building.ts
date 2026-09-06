@@ -1,7 +1,9 @@
+import type { SoftwareDeploymentStatus } from './infrastructure';
 import type { BlueprintRequirement, CompetencyId } from './learning';
 
 export type BuildingType =
   | 'helio-pump'
+  | 'helio-irrigation-station'
   | 'verdant-glasshouse'
   | 'sunvault-storage'
   | 'harvest-automaton';
@@ -45,6 +47,7 @@ export interface BuildingBlueprint {
   powerConsumption: number; // kW
   waterOutputRate?: number; // Liters / tick
   productionModifier?: number; // e.g. 1.25x
+  softwareId?: string;
   requiredCompetencies: CompetencyId[];
   requiredInfrastructure: {
     serviceName: string;
@@ -62,6 +65,9 @@ export interface BuildingInstance {
   width: number;
   height: number;
   status: BuildingStatus;
+  softwareId?: string;
+  softwareStatus?: SoftwareDeploymentStatus;
+  irrigationActive?: boolean;
   application?: ApplicationInstance;
   productionRate: number;
   powerConsumption: number;

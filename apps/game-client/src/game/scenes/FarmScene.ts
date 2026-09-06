@@ -242,15 +242,12 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    // 2. Check if clicked an existing building
+    // 2. Check if clicked an existing building (PRD §27 Building Inspection)
     const clickedBuilding = store.buildings.find(
       (b) => gx >= b.x && gx <= b.x + 1 && gy >= b.y && gy <= b.y + 1
     );
     if (clickedBuilding) {
-      const blueprint = BUILDINGS[clickedBuilding.type];
-      if (blueprint) {
-        store.openBlueprint(blueprint);
-      }
+      store.setInspectingBuilding(clickedBuilding);
       return;
     }
 
@@ -390,8 +387,7 @@ export class FarmScene extends Phaser.Scene {
 
   private emitIrrigationParticles() {
     const store = useGameStore.getState();
-    const service = store.serviceManager.getService('irrigation-controller');
-    if (service?.status !== 'running') return;
+    if (!store.serviceManager.isIrrigationActivelyPumping()) return;
 
     for (const b of store.buildings) {
       if (b.type === 'helio-pump' && b.status === 'healthy') {

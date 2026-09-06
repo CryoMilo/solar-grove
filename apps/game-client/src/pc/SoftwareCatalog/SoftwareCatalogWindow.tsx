@@ -1,11 +1,15 @@
+import { SOFTWARE_CATALOG } from '@solar-grove/content';
+import type { SoftwareDefinition } from '@solar-grove/game-types';
 import {
   Activity,
   CheckCircle2,
   Cpu,
   Database,
+  Download,
   ExternalLink,
   Globe,
   Layers,
+  Play,
   Search,
   Server,
   Terminal,
@@ -15,100 +19,26 @@ import type React from 'react';
 import { useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 
-interface SoftwareItem {
-  id: string;
-  name: string;
-  version: string;
-  buildingName: string;
-  buildingType: string;
-  description: string;
-  runtime: string;
-  port: number;
-  healthEndpoint: string;
-  database: string;
-  deployments: string[];
-  serviceName: string;
-}
-
-const CATALOG_ITEMS: SoftwareItem[] = [
-  {
-    id: 'irrigation-controller',
-    name: 'Irrigation Controller',
-    version: '1.4.2',
-    buildingName: 'Helio Irrigation Station',
-    buildingType: 'helio-pump',
-    description:
-      'Coordinates solar-powered deep aquifer pump telemetry, pressure sensors, and automated furrow valves.',
-    runtime: 'Node.js 22',
-    port: 8080,
-    healthEndpoint: '/health',
-    database: 'PostgreSQL (telemetry)',
-    deployments: ['Bare Linux (systemd)', 'Docker', 'AWS EC2'],
-    serviceName: 'irrigation-controller',
-  },
-  {
-    id: 'greenhouse-controller',
-    name: 'Greenhouse Controller',
-    version: '2.1.0',
-    buildingName: 'Verdant Glasshouse',
-    buildingType: 'verdant-glasshouse',
-    description:
-      'Regulates microclimate aeration, temperature, and humidity sensors for hyper-accelerated photosynthesis.',
-    runtime: 'Node.js (Docker Container)',
-    port: 4000,
-    healthEndpoint: '/health',
-    database: 'PostgreSQL (environment logs)',
-    deployments: ['Docker Container', 'Kubernetes'],
-    serviceName: 'greenhouse-api',
-  },
-  {
-    id: 'storage-controller',
-    name: 'Storage Controller',
-    version: '1.0.0',
-    buildingName: 'Sunvault Storage',
-    buildingType: 'sunvault-storage',
-    description:
-      'Inventory tracking, atmospheric moisture control, and automated crop spoilage prevention.',
-    runtime: 'Node.js 22',
-    port: 5000,
-    healthEndpoint: '/health',
-    database: 'PostgreSQL / Object Storage',
-    deployments: ['Bare Linux (systemd)', 'AWS S3'],
-    serviceName: 'storage-controller',
-  },
-  {
-    id: 'harvest-scheduler',
-    name: 'Harvest Scheduler',
-    version: '1.0.3',
-    buildingName: 'Harvest Automaton',
-    buildingType: 'harvest-automaton',
-    description:
-      'Autonomous queue worker and pathfinding dispatcher for harvesting ripe crops automatically.',
-    runtime: 'Worker Process',
-    port: 6379,
-    healthEndpoint: '/metrics',
-    database: 'Redis (job queue)',
-    deployments: ['Docker Worker', 'Redis Queue'],
-    serviceName: 'harvest-scheduler',
-  },
-];
-
 export const SoftwareCatalogWindow: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'running' | 'offline' | 'unhosted'>('all');
   const [selectedId, setSelectedId] = useState<string>('irrigation-controller');
+  const [deployFeedback, setDeployFeedback] = useState<string | null>(null);
 
   const serviceManager = useGameStore((s) => s.serviceManager);
   const setActiveWindow = useGameStore((s) => s.setActiveWindow);
   const setBrowserUrl = useGameStore((s) => s.setBrowserUrl);
+  const deploySoftware = useGameStore((s) => s.deploySoftware);
 
-  const getItemStatus = (item: SoftwareItem): 'running' | 'offline' | 'unhosted' => {
+  const catalogItems = Object.values(SOFTWARE_CATALOG);
+
+  const getItemStatus = (item: SoftwareDefinition): 'running' | 'offline' | 'unhosted' => {
     const svc = serviceManager.getService(item.serviceName);
     if (!svc) return 'unhosted';
     return svc.status === 'running' ? 'running' : 'offline';
   };
 
-  const filteredItems = CATALOG_ITEMS.filter((item) => {
+  const filteredItems = catalogItems.filter((item) => {
     const status = getItemStatus(item);
     const matchesSearch =
       item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -120,15 +50,25 @@ export const SoftwareCatalogWindow: React.FC = () => {
     return true;
   });
 
-  const selectedItem = CATALOG_ITEMS.find((item) => item.id === selectedId) || CATALOG_ITEMS[0];
+  const selectedItem: SoftwareDefinition =
+    SOFTWARE_CATALOG[selectedId] || SOFTWARE_CATALOG['irrigation-controller'];
+
+  const selectedSvc = serviceManager.getService(selectedItem.serviceName);
   const selectedStatus = getItemStatus(selectedItem);
+  const deploymentStatus = selectedSvc?.deploymentStatus || 'NOT_DEPLOYED';
+
+  const handleDeploy = () => {
+    const res = deploySoftware(selectedItem.id);
+    setDeployFeedback(res.message);
+    setTimeout(() => setDeployFeedback(null), 5000);
+  };
 
   return (
     <div
       style={{
         display: 'flex',
         height: '100%',
-        backgroundColor: '#07100d',
+        backgroundColor: '#0a1410',
         color: '#e2e8f0',
         fontFamily: 'var(--font-display)',
       }}
@@ -137,60 +77,64 @@ export const SoftwareCatalogWindow: React.FC = () => {
       <div
         style={{
           width: '380px',
-          borderRight: '1px solid rgba(214,158,46,0.25)',
+          borderRight: '1px solid rgba(214,158,46,0.3)',
           display: 'flex',
           flexDirection: 'column',
-          backgroundColor: 'rgba(10, 22, 17, 0.85)',
+          backgroundColor: '#08110e',
         }}
       >
-        {/* Header & Search */}
-        <div style={{ padding: '16px', borderBottom: '1px solid rgba(214,158,46,0.2)' }}>
+        {/* Search & Filter Header */}
+        <div
+          style={{
+            padding: '16px',
+            borderBottom: '1px solid rgba(72,187,120,0.2)',
+          }}
+        >
           <div
             style={{
-              fontSize: '15px',
-              fontWeight: 800,
-              color: '#ecc94b',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
               marginBottom: '12px',
+              color: '#ecc94b',
+              fontWeight: 800,
+              fontSize: '14px',
+              letterSpacing: '0.04em',
             }}
           >
             <Layers size={18} />
-            <span>SOFTWARE CATALOG (PRD §10)</span>
+            <span>SOLAR GROVE SOFTWARE CATALOG</span>
           </div>
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              backgroundColor: '#07100d',
-              border: '1px solid rgba(72,187,120,0.3)',
-              borderRadius: '6px',
-              padding: '6px 10px',
-              marginBottom: '10px',
-            }}
-          >
-            <Search size={14} color="#718096" />
+          <div style={{ position: 'relative', marginBottom: '10px' }}>
+            <Search
+              size={14}
+              style={{
+                position: 'absolute',
+                left: '10px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: '#718096',
+              }}
+            />
             <input
               type="text"
-              placeholder="Search software catalog..."
+              placeholder="Search services or buildings..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#fff',
+                width: '100%',
+                padding: '7px 10px 7px 32px',
+                backgroundColor: '#050c09',
+                border: '1px solid rgba(214,158,46,0.4)',
+                borderRadius: '6px',
+                color: '#f0fff4',
                 fontSize: '12px',
                 outline: 'none',
-                width: '100%',
-                fontFamily: 'inherit',
               }}
             />
           </div>
 
-          {/* Filter Pills */}
           <div style={{ display: 'flex', gap: '6px' }}>
             {(['all', 'running', 'offline', 'unhosted'] as const).map((f) => (
               <button
@@ -218,6 +162,8 @@ export const SoftwareCatalogWindow: React.FC = () => {
           {filteredItems.map((item) => {
             const status = getItemStatus(item);
             const isSelected = item.id === selectedId;
+            const svc = serviceManager.getService(item.serviceName);
+            const dStatus = svc?.deploymentStatus || 'NOT_DEPLOYED';
 
             return (
               <div
@@ -280,15 +226,27 @@ export const SoftwareCatalogWindow: React.FC = () => {
                       color:
                         status === 'running'
                           ? '#48bb78'
-                          : status === 'offline'
-                            ? '#fc8181'
-                            : '#ecc94b',
+                          : dStatus === 'DEPLOYED'
+                            ? '#ecc94b'
+                            : '#cbd5e0',
                     }}
                   >
-                    {status === 'running' && <CheckCircle2 size={11} />}
-                    {status === 'offline' && <XCircle size={11} />}
-                    {status === 'unhosted' && <Server size={11} />}
-                    {status.toUpperCase()}
+                    {status === 'running' ? (
+                      <>
+                        <CheckCircle2 size={11} />
+                        ONLINE
+                      </>
+                    ) : dStatus === 'DEPLOYED' ? (
+                      <>
+                        <Server size={11} />
+                        DEPLOYED
+                      </>
+                    ) : (
+                      <>
+                        <XCircle size={11} />
+                        NOT DEPLOYED
+                      </>
+                    )}
                   </span>
                 </div>
               </div>
@@ -349,43 +307,77 @@ export const SoftwareCatalogWindow: React.FC = () => {
               </p>
             </div>
 
-            {/* Hosting Status Badge */}
             <div
               style={{
-                padding: '6px 14px',
-                borderRadius: '6px',
-                fontWeight: 800,
-                fontSize: '12px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
-                backgroundColor:
-                  selectedStatus === 'running'
-                    ? 'rgba(72,187,120,0.2)'
-                    : selectedStatus === 'offline'
-                      ? 'rgba(229,62,62,0.2)'
-                      : 'rgba(236,201,75,0.2)',
-                border: `1px solid ${
+                gap: '8px',
+                padding: '6px 14px',
+                borderRadius: '6px',
+                border: '1px solid',
+                borderColor:
                   selectedStatus === 'running'
                     ? '#48bb78'
-                    : selectedStatus === 'offline'
-                      ? '#e53e3e'
-                      : '#ecc94b'
-                }`,
-                color:
+                    : deploymentStatus === 'DEPLOYED'
+                      ? '#ecc94b'
+                      : '#cbd5e0',
+                backgroundColor:
                   selectedStatus === 'running'
-                    ? '#68d391'
-                    : selectedStatus === 'offline'
-                      ? '#fc8181'
-                      : '#ecc94b',
+                    ? 'rgba(72,187,120,0.15)'
+                    : deploymentStatus === 'DEPLOYED'
+                      ? 'rgba(236,201,75,0.15)'
+                      : 'rgba(160,174,192,0.15)',
               }}
             >
-              <Activity size={14} />
-              <span>STATUS: {selectedStatus.toUpperCase()}</span>
+              <div
+                style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor:
+                    selectedStatus === 'running'
+                      ? '#48bb78'
+                      : deploymentStatus === 'DEPLOYED'
+                        ? '#ecc94b'
+                        : '#a0aec0',
+                }}
+              />
+              <span
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color:
+                    selectedStatus === 'running'
+                      ? '#48bb78'
+                      : deploymentStatus === 'DEPLOYED'
+                        ? '#ecc94b'
+                        : '#cbd5e0',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {selectedStatus === 'running' ? 'RUNNING' : deploymentStatus}
+              </span>
             </div>
           </div>
 
-          {/* Technical Specifications Matrix */}
+          {/* Feedback banner */}
+          {deployFeedback && (
+            <div
+              style={{
+                padding: '10px 14px',
+                backgroundColor: 'rgba(72,187,120,0.2)',
+                border: '1px solid #48bb78',
+                borderRadius: '6px',
+                marginBottom: '16px',
+                fontSize: '12px',
+                color: '#68d391',
+              }}
+            >
+              ✓ {deployFeedback}
+            </div>
+          )}
+
+          {/* Technical Architecture Matrix */}
           <div
             style={{
               display: 'grid',
@@ -412,7 +404,7 @@ export const SoftwareCatalogWindow: React.FC = () => {
                   gap: '6px',
                 }}
               >
-                <Cpu size={13} color="#4fd1c5" /> RUNTIME & COMPUTE
+                <Cpu size={13} color="#4fd1c5" /> RUNTIME SPECIFICATION
               </div>
               <div style={{ fontSize: '14px', fontWeight: 700, color: '#f0fff4' }}>
                 {selectedItem.runtime}
@@ -437,7 +429,7 @@ export const SoftwareCatalogWindow: React.FC = () => {
                   gap: '6px',
                 }}
               >
-                <Globe size={13} color="#ecc94b" /> PORT & HEALTH ENDPOINT
+                <Globe size={13} color="#63b3ed" /> NETWORK SOCKET & HEALTH
               </div>
               <div
                 style={{
@@ -543,9 +535,20 @@ export const SoftwareCatalogWindow: React.FC = () => {
               paddingTop: '18px',
             }}
           >
+            {deploymentStatus === 'NOT_DEPLOYED' && (
+              <button
+                type="button"
+                className="btn-solarpunk btn-gold"
+                onClick={handleDeploy}
+                style={{ padding: '8px 16px', fontSize: '12px' }}
+              >
+                <Download size={15} /> Deploy Software Package
+              </button>
+            )}
+
             <button
               type="button"
-              className="btn-solarpunk btn-gold"
+              className="btn-solarpunk"
               onClick={() => setActiveWindow('terminal')}
               style={{ padding: '8px 16px', fontSize: '12px' }}
             >
@@ -562,7 +565,7 @@ export const SoftwareCatalogWindow: React.FC = () => {
                 }}
                 style={{ padding: '8px 16px', fontSize: '12px' }}
               >
-                <Globe size={15} /> Open Web Interface (PRD §15)
+                <Globe size={15} /> Open Web Interface
               </button>
             )}
 

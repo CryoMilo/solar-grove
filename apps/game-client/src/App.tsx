@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useEffect } from 'react';
+import { BuildingInspectModal } from './components/BuildingInspectModal';
+import { ConceptDiscoveryToast } from './components/ConceptDiscoveryToast';
 import { PerfOverlay } from './components/PerfOverlay';
 import { PhaserGame } from './game/PhaserGame';
 import { BlueprintModal } from './pc/BlueprintModal/BlueprintModal';
@@ -142,7 +144,7 @@ export const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Active Incident Alert Banner */}
+          {/* Active Incident Alert Banner (PRD Section 23) */}
           {activeIncidents.length > 0 && (
             <div
               className="glass-panel incident-alarm-bar frame-solarpunk"
@@ -176,14 +178,10 @@ export const App: React.FC = () => {
                     letterSpacing: '0.04em',
                   }}
                 >
-                  CRITICAL INCIDENT: {activeIncidents[0].title}
+                  ⚠ IRRIGATION STATION
                 </div>
                 <div style={{ fontSize: '12px', color: '#feb2b2' }}>
-                  Target:{' '}
-                  <span style={{ fontFamily: 'monospace', color: '#ecc94b' }}>
-                    {activeIncidents[0].affectedServiceName}
-                  </span>{' '}
-                  — Irrigation stopped.
+                  Automatic irrigation has stopped. Crop production is being affected.
                 </div>
               </div>
               <button
@@ -341,7 +339,7 @@ export const App: React.FC = () => {
               onClick={() => startPlacement('helio-pump')}
               style={{ padding: '7px 14px', fontSize: '12px' }}
             >
-              <Sun size={15} color="#ecc94b" /> Build Helio Pump (250 G)
+              <Sun size={15} color="#ecc94b" /> Build Helio Irrigation Station (100 G)
             </button>
 
             <button
@@ -397,6 +395,12 @@ export const App: React.FC = () => {
 
       {/* Helios OS Desktop Modal View */}
       {pcOpen && <HeliosDesktop />}
+
+      {/* Building Inspection Modal (accessible by clicking building on farm) */}
+      {!pcOpen && <BuildingInspectModal />}
+
+      {/* Concept Discovery Toast */}
+      <ConceptDiscoveryToast />
 
       {/* Blueprint Modal (accessible in farm mode too) */}
       {!pcOpen && activeBlueprint && (

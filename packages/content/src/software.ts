@@ -1,0 +1,64 @@
+import type { SoftwareDefinition } from '@solar-grove/game-types';
+
+export const SOFTWARE_CATALOG: Record<string, SoftwareDefinition> = {
+  'irrigation-controller': {
+    id: 'irrigation-controller',
+    name: 'Irrigation Controller',
+    version: '1.4.2',
+    runtime: 'Node.js 20',
+    port: 8080,
+    healthEndpoint: '/health',
+    description:
+      'Coordinates solar-powered deep aquifer pump telemetry, pressure sensors, and automated furrow valves for the Helio Irrigation Station.',
+    buildingName: 'Helio Irrigation Station',
+    buildingType: 'helio-pump',
+    database: 'PostgreSQL (telemetry)',
+    deployments: ['Bare Linux (systemd)', 'Docker', 'AWS EC2'],
+    serviceName: 'irrigation-controller',
+  },
+  'greenhouse-controller': {
+    id: 'greenhouse-controller',
+    name: 'Greenhouse Controller',
+    version: '2.1.0',
+    runtime: 'Node.js 20 (Docker Container)',
+    port: 4000,
+    healthEndpoint: '/health',
+    description:
+      'Regulates microclimate aeration, temperature, and humidity sensors for hyper-accelerated photosynthesis in the Verdant Glasshouse.',
+    buildingName: 'Verdant Glasshouse',
+    buildingType: 'verdant-glasshouse',
+    database: 'PostgreSQL (environment logs)',
+    deployments: ['Docker Container', 'Kubernetes'],
+    serviceName: 'greenhouse-api',
+  },
+  'storage-controller': {
+    id: 'storage-controller',
+    name: 'Storage Controller',
+    version: '1.0.0',
+    runtime: 'Node.js 22',
+    port: 5000,
+    healthEndpoint: '/health',
+    description:
+      'Inventory tracking, atmospheric moisture control, and automated crop spoilage prevention in Sunvault Storage.',
+    buildingName: 'Sunvault Storage',
+    buildingType: 'sunvault-storage',
+    database: 'PostgreSQL / Object Storage',
+    deployments: ['Bare Linux (systemd)', 'AWS S3'],
+    serviceName: 'storage-controller',
+  },
+  'harvest-scheduler': {
+    id: 'harvest-scheduler',
+    name: 'Harvest Scheduler',
+    version: '1.0.3',
+    runtime: 'Worker Process',
+    port: 6379,
+    healthEndpoint: '/metrics',
+    description:
+      'Autonomous queue worker and pathfinding dispatcher for harvesting ripe crops automatically.',
+    buildingName: 'Harvest Automaton',
+    buildingType: 'harvest-automaton',
+    database: 'Redis (job queue)',
+    deployments: ['Docker Worker', 'Redis Queue'],
+    serviceName: 'harvest-scheduler',
+  },
+};

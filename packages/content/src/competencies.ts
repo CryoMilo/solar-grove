@@ -137,3 +137,51 @@ export const COMPETENCIES: CompetencyDefinition[] = [
     prerequisites: ['networking.http'],
   },
 ];
+
+export interface ConceptDiscovery {
+  id: string;
+  name: string;
+  conceptName: string;
+  summary: string;
+  details: string;
+  listenPort?: number;
+}
+
+export const CONCEPT_DISCOVERIES: Record<string, ConceptDiscovery> = {
+  'linux.processes': {
+    id: 'linux.processes',
+    name: 'Processes',
+    conceptName: 'PROCESS',
+    summary:
+      'A process is an instance of a computer program that is being executed by one or many threads.',
+    details:
+      'The Irrigation Controller runs as an OS process with an assigned Process ID (PID). Commands like ps and top query active processes.',
+  },
+  'linux.services': {
+    id: 'linux.services',
+    name: 'Services',
+    conceptName: 'SERVICE',
+    summary:
+      'A background service (daemon) is managed by systemd to keep vital infrastructure running automatically.',
+    details:
+      'The irrigation-controller.service unit allows starting, stopping, and auto-restarting when machine reboots or crashes occur.',
+  },
+  'networking.ports': {
+    id: 'networking.ports',
+    name: 'Ports',
+    conceptName: 'PORT',
+    summary: 'A network port identifies where a service accepts network connections.',
+    details:
+      'The Irrigation Controller listens on port 8080. When running, socket tools like ss -tulpn show 0.0.0.0:8080 LISTEN.',
+    listenPort: 8080,
+  },
+  'networking.http': {
+    id: 'networking.http',
+    name: 'HTTP Protocol',
+    conceptName: 'HTTP',
+    summary:
+      'Hypertext Transfer Protocol allows web clients and browsers to communicate with services via structured requests and responses.',
+    details:
+      'Web browsers and curl communicate with http://irrigation.local:8080 via HTTP GET and POST requests. HTTP 200 OK signals healthy operations.',
+  },
+};

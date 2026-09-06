@@ -12,8 +12,8 @@ export class IncidentEngine {
         incident = {
           id,
           type,
-          title: 'Process Unexpectedly Terminated',
-          description: `The process for ${serviceName} crashed with SIGTERM. Irrigation and automation halted.`,
+          title: 'Irrigation Telemetry Lost',
+          description: 'Automatic irrigation has stopped. Crop production is being affected.',
           affectedBuildingId: buildingId,
           affectedServiceName: serviceName,
           severity: 'high',
@@ -21,7 +21,7 @@ export class IncidentEngine {
           detectedAt: Date.now(),
           productionPenaltyPercent: 50,
           remediationHint:
-            'Inspect running processes with `ps`, then restart using `systemctl start <service>` or `./<service>`.',
+            'Automatic irrigation halted. Inspect system services and processes in Terminal (ps, systemctl status).',
           suggestedCommand: `systemctl restart ${serviceName}`,
         };
         break;

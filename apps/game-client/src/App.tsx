@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useEffect } from 'react';
+import { PerfOverlay } from './components/PerfOverlay';
 import { PhaserGame } from './game/PhaserGame';
 import { BlueprintModal } from './pc/BlueprintModal/BlueprintModal';
 import { HeliosDesktop } from './pc/HeliosDesktop';
@@ -406,6 +407,9 @@ export const App: React.FC = () => {
       {!pcOpen && activeMicroLesson && (
         <MicroLessonDrawer lesson={activeMicroLesson} onClose={closeMicroLesson} />
       )}
+
+      {/* Performance & Heat Monitor (PRD §58) */}
+      <PerfOverlay />
     </div>
   );
 };

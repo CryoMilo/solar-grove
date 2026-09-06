@@ -305,41 +305,45 @@ export class CommandEngine {
     // CURL
     this.register('curl', (args, sm) => {
       const url = args[args.length - 1] || '';
-      if (!url) {
+      if (!url || url.startsWith('-')) {
         return { stdout: "curl: try 'curl --help' for more information\r\n", exitCode: 2 };
       }
 
-      const isPort3000 = url.includes('3000');
-      const isPort8080 = url.includes('8080');
+      const isIrrigation =
+        url.includes('irrigation') ||
+        url.includes('3000') ||
+        (url.includes('8080') && !url.includes('greenhouse'));
+      const isGreenhouse = url.includes('greenhouse') || url.includes('4000');
 
-      if (isPort3000) {
+      if (isIrrigation) {
         const irrService = sm.getService('irrigation-controller');
         if (irrService?.status === 'running') {
           return {
-            stdout: `HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nDate: ${new Date().toUTCString()}\r\n\r\n{"status":"healthy","service":"irrigation-controller","pressurePsi":45.2,"flowRateLpm":12.8}\r\n`,
+            stdout: `HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nDate: ${new Date().toUTCString()}\r\n\r\n{"status":"online","service":"irrigation-controller","version":"1.4.2","reservoirPct":78,"soilMoisturePct":43,"activeZones":3}\r\n`,
             exitCode: 0,
             unlockedCompetency: 'networking.ports',
           };
         }
         return {
-          stdout: 'curl: (7) Failed to connect to localhost port 3000: Connection refused\r\n',
+          stdout: `curl: (7) Failed to connect to ${url.replace(/^https?:\/\//, '').split('/')[0]} port 8080: Connection refused\r\n`,
           exitCode: 7,
           unlockedCompetency: 'networking.ports',
         };
       }
 
-      if (isPort8080) {
+      if (isGreenhouse) {
         const ghService = sm.getService('greenhouse-api');
         if (ghService?.status === 'running') {
           return {
             stdout:
-              'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{"status":"active","greenhouse":"verdant-glasshouse","yieldMultiplier":1.4}\r\n',
+              'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{"status":"active","service":"greenhouse-api","version":"2.1.0","yieldMultiplier":1.4}\r\n',
             exitCode: 0,
             unlockedCompetency: 'networking.http',
           };
         }
         return {
-          stdout: 'curl: (7) Failed to connect to localhost port 8080: Connection refused\r\n',
+          stdout:
+            'curl: (7) Failed to connect to greenhouse.local port 4000: Connection refused\r\n',
           exitCode: 7,
         };
       }
@@ -348,6 +352,25 @@ export class CommandEngine {
         stdout: `curl: (6) Could not resolve host: ${url}\r\n`,
         exitCode: 6,
       };
+    });
+
+    // SS / NETSTAT
+    this.register('ss', (_args, sm) => {
+      const services = sm.getAllServices().filter((s) => s.status === 'running');
+      const lines = [
+        'Netid  State   Recv-Q  Send-Q   Local Address:Port   Peer Address:Port  Process',
+      ];
+      for (const s of services) {
+        lines.push(
+          `tcp    LISTEN  0       128            0.0.0.0:${s.port}        0.0.0.0:*      users:(("${s.name}",pid=${s.pid || 1042},fd=18))`
+        );
+      }
+      lines.push('');
+      return { stdout: lines.join('\r\n'), exitCode: 0, unlockedCompetency: 'networking.ports' };
+    });
+
+    this.register('netstat', (args, sm) => {
+      return this.handlers.get('ss')!(args, sm);
     });
 
     // PING

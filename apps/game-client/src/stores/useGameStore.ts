@@ -24,7 +24,9 @@ export type HeliosWindowId =
   | 'cloud'
   | 'blueprints'
   | 'knowledge'
-  | 'objectives';
+  | 'objectives'
+  | 'browser'
+  | 'software';
 
 export interface PlacementState {
   active: boolean;
@@ -42,6 +44,8 @@ interface GameStore {
   activeBlueprint: BuildingBlueprint | null;
   activeMicroLesson: MicroLesson | null;
   placementMode: PlacementState;
+  browserUrl: string;
+  irrigationPumping: boolean;
 
   serviceManager: ServiceManager;
   incidentEngine: IncidentEngine;
@@ -50,6 +54,8 @@ interface GameStore {
   tick: () => void;
   togglePc: (forced?: boolean) => void;
   setActiveWindow: (w: HeliosWindowId) => void;
+  setBrowserUrl: (url: string) => void;
+  setIrrigationPumping: (active: boolean) => void;
   openBlueprint: (b: BuildingBlueprint) => void;
   closeBlueprint: () => void;
   openMicroLesson: (m: MicroLesson) => void;
@@ -158,6 +164,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   activeBlueprint: null,
   activeMicroLesson: null,
   placementMode: { active: false, buildingType: null },
+  browserUrl: 'http://irrigation.local:8080',
+  irrigationPumping: true,
 
   serviceManager: initialServiceManager,
   incidentEngine: initialIncidentEngine,
@@ -169,6 +177,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     })),
 
   setActiveWindow: (w) => set({ activeWindow: w }),
+  setBrowserUrl: (url) => set({ browserUrl: url }),
+  setIrrigationPumping: (active) => set({ irrigationPumping: active }),
 
   openBlueprint: (b) => set({ activeBlueprint: b }),
   closeBlueprint: () => set({ activeBlueprint: null }),
@@ -475,7 +485,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   tick: () => {
-    const { farmState, buildings, serviceManager } = get();
+    const { farmState, buildings, serviceManager, irrigationPumping } = get();
 
     // 1. Water production from running Helio Pumps
     let waterGen = 0;
@@ -493,7 +503,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const newWater = Math.min(farmState.maxWater, farmState.water + waterGen);
 
-    // 2. Crop Growth
+    // 2. Crop Growth & Hydration
+    const isPumping =
+      irrigationPumping && buildings.some((b) => b.type === 'helio-pump' && b.status === 'healthy');
+
     const updatedCrops = farmState.crops.map((crop) => {
       if (crop.stage === 'mature') return crop;
 
@@ -502,6 +515,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       let growthRate = 1 / def.growthDurationSeconds;
       if (crop.hydration > 50) growthRate *= 1.25;
+      if (crop.hydration >= 85) growthRate *= 1.4;
 
       const hasGlasshouse = buildings.some(
         (b) => b.type === 'verdant-glasshouse' && b.status === 'healthy'
@@ -514,11 +528,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       else if (newProgress >= 0.6) newStage = 'growing';
       else if (newProgress >= 0.25) newStage = 'sprout';
 
+      const hydrationDelta = isPumping ? 4 : -1;
+      const newHydration = Math.min(100, Math.max(15, crop.hydration + hydrationDelta));
+
       return {
         ...crop,
         growthProgress: newProgress,
         stage: newStage,
-        hydration: Math.max(20, crop.hydration - 1),
+        hydration: newHydration,
       };
     });
 

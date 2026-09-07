@@ -38,7 +38,26 @@ export type CompetencyId =
   | 'databases.backups'
   | 'cloud.compute'
   | 'cloud.storage'
-  | 'cloud.monitoring';
+  | 'cloud.monitoring'
+  | 'cloud.computing'
+  | 'cloud.aws'
+  | 'cloud.gcp'
+  | 'cloud.vpc'
+  | 'cloud.subnet'
+  | 'cloud.public-subnet'
+  | 'cloud.private-subnet'
+  | 'cloud.ec2'
+  | 'cloud.compute-engine'
+  | 'cloud.object-storage'
+  | 'cloud.s3'
+  | 'cloud.cloud-storage'
+  | 'cloud.managed-database'
+  | 'cloud.rds'
+  | 'cloud.cloud-sql'
+  | 'cloud.security-group'
+  | 'cloud.cloud-firewall'
+  | 'cloud.cloud-costs'
+  | 'cloud.cloud-migration';
 
 export interface ConceptDiscovery {
   id: CompetencyId;

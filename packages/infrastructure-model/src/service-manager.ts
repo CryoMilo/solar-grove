@@ -1,13 +1,24 @@
 import type {
   CertificateStatus,
+  CloudAccount,
+  CloudComputeInstance,
+  CloudMigrationProgress,
+  CloudProvider,
+  CloudSubnet,
+  CloudVpc,
   ContainerHealth,
   ContainerStatus,
+  DeploymentTarget,
   DnsRecord,
   DockerImage,
   DockerNetwork,
   HostPort,
   HostProcess,
+  ManagedDatabaseInstance,
   NetworkHost,
+  NetworkRule,
+  ObjectStorageBucket,
+  ObjectStorageObject,
   PostgresState,
   PostgresTelemetryRecord,
   ProxyRoute,
@@ -17,6 +28,7 @@ import type {
   SoftwareDeploymentStatus,
   TlsCertificate,
 } from '@solar-grove/game-types';
+import { CloudCostSummary, CloudManager, ConnectivityResult } from './cloud';
 
 export interface ServiceDefinition {
   name: string;
@@ -51,6 +63,7 @@ export class ServiceManager {
   private dnsRecords: Map<string, DnsRecord> = new Map();
   private proxyRoutes: Map<string, ProxyRoute> = new Map();
   private tlsCertificates: Map<string, TlsCertificate> = new Map();
+  private cloudManager: CloudManager = new CloudManager();
   private nextPid = 1421;
 
   private irrigationTelemetry: IrrigationTelemetry = {
@@ -1128,6 +1141,132 @@ export class ServiceManager {
     path: string,
     method: string
   ): SimulatedHttpResponse {
+    // Check if running on Cloud infrastructure (Phase 5)
+    if (this.cloudManager.getDeploymentTarget() === 'cloud') {
+      const compute = this.cloudManager.getComputeInstance('i-greenhouse-01');
+      if (!compute || compute.status !== 'RUNNING') {
+        return {
+          statusCode: 0,
+          statusText: 'ERR_CONNECTION_REFUSED',
+          headers: {},
+          body: '',
+          error: 'ERR_CONNECTION_REFUSED: Could not connect to cloud compute instance at 10.10.1.10:4000.',
+        };
+      }
+
+      // Check DATABASE_URL misconfiguration (e.g. localhost failure)
+      const dbUrl = compute.environment.DATABASE_URL || '';
+      if (dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1')) {
+        const errorPayload = {
+          error: 'Bad Gateway',
+          statusCode: 502,
+          message:
+            'Upstream database failure: Unable to establish connection to PostgreSQL at localhost:5432. Connection refused (111: Connection refused). In cloud compute, localhost refers to the local VM/container, not the managed database. Update DATABASE_URL to greenhouse-db.internal.',
+          timestamp: new Date().toISOString(),
+        };
+        return {
+          statusCode: 502,
+          statusText: 'Bad Gateway',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(errorPayload, null, 2),
+          jsonData: errorPayload,
+          error: 'HTTP 502 Bad Gateway: Database connection failed (DATABASE_URL references localhost).',
+        };
+      }
+
+      // Check security group rule reachability
+      const reachability = this.cloudManager.evaluateConnectivity('greenhouse-app', 'greenhouse-db', 5432);
+      if (!reachability.allowed) {
+        const errorPayload = {
+          error: 'Bad Gateway',
+          statusCode: 502,
+          message: `Upstream database failure: Security group blocked TCP 5432 to PostgreSQL at greenhouse-db.internal:5432. Connection timed out. ${reachability.reason}`,
+          timestamp: new Date().toISOString(),
+        };
+        return {
+          statusCode: 502,
+          statusText: 'Bad Gateway',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(errorPayload, null, 2),
+          jsonData: errorPayload,
+          error: `HTTP 502 Bad Gateway: Security group blocked TCP 5432 (${reachability.reason})`,
+        };
+      }
+
+      // Return healthy cloud responses
+      if (path === '/health') {
+        const healthPayload = {
+          status: 'healthy',
+          database: 'connected',
+          service: 'greenhouse-controller',
+          version: '3.0.0-cloud',
+          deploymentTarget: 'cloud',
+          provider: compute.provider,
+          instanceId: compute.id,
+        };
+        return {
+          statusCode: 200,
+          statusText: 'OK',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(healthPayload),
+          jsonData: healthPayload,
+        };
+      }
+
+      if (path === '/api/greenhouse/state') {
+        const statePayload = {
+          status: 'ACTIVE',
+          growthOptimization: true,
+          temperature: 24.5,
+          humidity: 71,
+          soilMoisture: 82,
+          database: 'CONNECTED',
+          controller: 'HEALTHY',
+          deploymentTarget: 'cloud',
+          provider: compute.provider,
+          instanceType: compute.instanceType,
+        };
+        return {
+          statusCode: 200,
+          statusText: 'OK',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(statePayload),
+          jsonData: statePayload,
+        };
+      }
+
+      if (path === '/api/greenhouse/telemetry') {
+        return {
+          statusCode: 200,
+          statusText: 'OK',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.postgresState.tables.greenhouse_telemetry),
+          jsonData: { telemetry: this.postgresState.tables.greenhouse_telemetry },
+        };
+      }
+
+      const consoleState = {
+        title: 'VERDANT GLASSHOUSE (CLOUD DEPLOYMENT)',
+        temperature: '24.5°C',
+        humidity: '71%',
+        soilMoisture: '82%',
+        growthOptimization: 'ACTIVE',
+        database: 'CONNECTED',
+        controller: 'HEALTHY',
+        version: '3.0.0-cloud',
+        provider: compute.provider.toUpperCase(),
+        instance: compute.id,
+      };
+
+      return {
+        statusCode: 200,
+        statusText: 'OK',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(consoleState, null, 2),
+        jsonData: consoleState,
+      };
+    }
+
     const ghContainer = this.findContainer('greenhouse-controller');
 
     // Check if container is running
@@ -1331,10 +1470,12 @@ export class ServiceManager {
           };
         }
 
-        // Route to Greenhouse Controller Container
+        // Route to Greenhouse Controller Container or Cloud Compute
         if (
           route.upstreamHost === 'greenhouse-controller' ||
-          route.upstreamHost === '10.0.0.20'
+          route.upstreamHost === '10.0.0.20' ||
+          route.upstreamHost === '10.10.1.10' ||
+          route.upstreamHost === 'greenhouse-compute'
         ) {
           const res = this.handleGreenhouseRequest(path, method);
           res.headers = { ...res.headers, Server: 'nginx/1.24.0' };
@@ -1609,6 +1750,14 @@ export class ServiceManager {
   }
 
   isGreenhouseOptimized(): boolean {
+    if (this.cloudManager.getDeploymentTarget() === 'cloud') {
+      const compute = this.cloudManager.getComputeInstance('i-greenhouse-01');
+      if (!compute || compute.status !== 'RUNNING') return false;
+      const dbUrl = compute.environment.DATABASE_URL || '';
+      if (dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1')) return false;
+      const reachability = this.cloudManager.evaluateConnectivity('greenhouse-app', 'greenhouse-db', 5432);
+      return reachability.allowed;
+    }
     const c = this.findContainer('greenhouse-controller');
     return c?.status === 'RUNNING' && c.health === 'HEALTHY';
   }
@@ -1623,4 +1772,100 @@ export class ServiceManager {
     }
     return undefined;
   }
+
+  // ==========================================
+  // --- Phase 5: Cloud Architecture Facade ---
+  // ==========================================
+
+  getCloudManager(): CloudManager {
+    return this.cloudManager;
+  }
+
+  getActiveCloudProvider(): CloudProvider {
+    return this.cloudManager.getActiveProvider();
+  }
+
+  setActiveCloudProvider(provider: CloudProvider): void {
+    this.cloudManager.setActiveProvider(provider);
+  }
+
+  getDeploymentTarget(): DeploymentTarget {
+    return this.cloudManager.getDeploymentTarget();
+  }
+
+  setDeploymentTarget(target: DeploymentTarget): void {
+    this.cloudManager.setDeploymentTarget(target);
+    if (target === 'cloud') {
+      const route = this.findMatchingRoute('greenhouse.solar-grove.local');
+      if (route) {
+        route.upstreamHost = '10.10.1.10';
+        route.upstreamPort = 4000;
+      }
+    }
+  }
+
+  getCloudAccounts(): CloudAccount[] {
+    return this.cloudManager.getAccounts();
+  }
+
+  getCloudVpcs(): CloudVpc[] {
+    return this.cloudManager.getVpcs();
+  }
+
+  getCloudSubnets(): CloudSubnet[] {
+    return this.cloudManager.getSubnets();
+  }
+
+  getCloudComputeInstances(): CloudComputeInstance[] {
+    return this.cloudManager.getComputeInstances();
+  }
+
+  getCloudComputeInstance(id: string): CloudComputeInstance | undefined {
+    return this.cloudManager.getComputeInstance(id);
+  }
+
+  getCloudDatabases(): ManagedDatabaseInstance[] {
+    return this.cloudManager.getManagedDatabases();
+  }
+
+  getCloudBuckets(): ObjectStorageBucket[] {
+    return this.cloudManager.getBuckets();
+  }
+
+  getNetworkRules(): NetworkRule[] {
+    return this.cloudManager.getNetworkRules();
+  }
+
+  getCloudMigrationProgress(): CloudMigrationProgress {
+    return this.cloudManager.getMigrationProgress();
+  }
+
+  startCloudMigration(): { success: boolean; message: string } {
+    return this.cloudManager.startMigration();
+  }
+
+  executeCloudMigrationStep(options: { forceLocalhostError?: boolean } = {}) {
+    const res = this.cloudManager.executeMigrationStep(options);
+    if (res.phase === 'COMPLETE') {
+      const route = this.findMatchingRoute('greenhouse.solar-grove.local');
+      if (route) {
+        route.upstreamHost = '10.10.1.10';
+        route.upstreamPort = 4000;
+      }
+    }
+    return res;
+  }
+
+  setCloudRuleEnabled(ruleId: string, enabled: boolean): boolean {
+    return this.cloudManager.setRuleEnabled(ruleId, enabled);
+  }
+
+  archiveTelemetryToCloudStorage(): ObjectStorageObject {
+    return this.cloudManager.archiveTelemetry(this.postgresState.tables.greenhouse_telemetry);
+  }
+
+  getCloudCostSummary(): CloudCostSummary {
+    return this.cloudManager.calculateCosts();
+  }
 }
+

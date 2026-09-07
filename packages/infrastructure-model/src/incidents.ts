@@ -170,6 +170,101 @@ export class IncidentEngine {
           suggestedCommand: 'openssl s_client -connect 10.0.0.10:443 -servername greenhouse.solar-grove.local',
         };
         break;
+
+      case 'cloud-security-group-blocked':
+        incident = {
+          id,
+          type,
+          title: 'Cloud Database Ingress Blocked (TCP 5432)',
+          description:
+            'Greenhouse Controller compute instance cannot reach managed PostgreSQL. No ALLOW rule exists for TCP 5432 from greenhouse-app security group.',
+          affectedBuildingId: buildingId,
+          affectedServiceName: serviceName,
+          severity: 'critical',
+          resolved: false,
+          detectedAt: Date.now(),
+          productionPenaltyPercent: 50,
+          remediationHint:
+            'Inspect Cloud Console Security Groups. Enable or add ALLOW rule for TCP 5432 from source greenhouse-app to greenhouse-db.',
+          suggestedCommand: 'aws ec2 describe-security-groups',
+        };
+        break;
+
+      case 'cloud-wrong-db-endpoint':
+        incident = {
+          id,
+          type,
+          title: 'Invalid Database Connection String (localhost)',
+          description:
+            'Greenhouse Controller is attempting to connect to PostgreSQL at localhost:5432. In cloud compute, localhost refers to the VM container itself.',
+          affectedBuildingId: buildingId,
+          affectedServiceName: serviceName,
+          severity: 'high',
+          resolved: false,
+          detectedAt: Date.now(),
+          productionPenaltyPercent: 50,
+          remediationHint:
+            'Update DATABASE_URL to point to managed database endpoint `greenhouse-db.internal:5432`.',
+          suggestedCommand: 'aws rds describe-db-instances',
+        };
+        break;
+
+      case 'cloud-public-database':
+        incident = {
+          id,
+          type,
+          title: 'Security Warning: Database Exposed to Public Internet',
+          description:
+            'Managed PostgreSQL is configured with public accessibility enabled, exposing farm data to the external internet.',
+          affectedBuildingId: buildingId,
+          affectedServiceName: serviceName,
+          severity: 'medium',
+          resolved: false,
+          detectedAt: Date.now(),
+          productionPenaltyPercent: 15,
+          remediationHint:
+            'Disable public accessibility and enforce private subnet isolation in Cloud Console.',
+          suggestedCommand: 'aws rds describe-db-instances',
+        };
+        break;
+
+      case 'cloud-compute-stopped':
+        incident = {
+          id,
+          type,
+          title: 'Cloud Compute Instance Stopped',
+          description:
+            'The cloud VM running the Greenhouse Controller (i-greenhouse-01) is powered off. Edge relay received connection refused.',
+          affectedBuildingId: buildingId,
+          affectedServiceName: serviceName,
+          severity: 'critical',
+          resolved: false,
+          detectedAt: Date.now(),
+          productionPenaltyPercent: 50,
+          remediationHint:
+            'Start the compute instance via Cloud Console or CLI: `aws ec2 start-instances --instance-ids i-greenhouse-01`.',
+          suggestedCommand: 'aws ec2 start-instances --instance-ids i-greenhouse-01',
+        };
+        break;
+
+      case 'cloud-region-degraded':
+        incident = {
+          id,
+          type,
+          title: 'Cloud Region Degraded (ap-southeast-1)',
+          description:
+            'Simulated cloud regional degradation causing latency spikes and transient connection drops.',
+          affectedBuildingId: buildingId,
+          affectedServiceName: serviceName,
+          severity: 'medium',
+          resolved: false,
+          detectedAt: Date.now(),
+          productionPenaltyPercent: 20,
+          remediationHint:
+            'Check cloud status and verify service metrics or configure multi-AZ backup routes.',
+          suggestedCommand: 'aws configure',
+        };
+        break;
     }
 
     this.activeIncidents.set(id, incident);

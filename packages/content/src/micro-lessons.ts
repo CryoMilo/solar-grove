@@ -1,6 +1,6 @@
 import type { CompetencyId, MicroLesson } from '@solar-grove/game-types';
 
-export const MICRO_LESSONS: Record<CompetencyId, MicroLesson> = {
+export const MICRO_LESSONS: Partial<Record<CompetencyId, MicroLesson>> = {
   'linux.processes': {
     id: 'linux.processes',
     title: '🌿 What is a Linux Process?',
@@ -368,4 +368,109 @@ export const MICRO_LESSONS: Record<CompetencyId, MicroLesson> = {
     whyFarmNeedsIt:
       'Guarantees all farm operators are transparently routed to encrypted channels.',
   },
+  'cloud.computing': {
+    id: 'cloud.computing',
+    title: '☁️ Cloud Architecture & Shared Responsibility',
+    category: 'cloud',
+    readTimeSeconds: 50,
+    summary: 'Cloud infrastructure replaces on-premise hardware with on-demand computing resources.',
+    explanation:
+      'Cloud platforms provide compute, networking, and databases as elastic services, shifting physical hardware maintenance to cloud providers while giving developers precise software control.',
+    suggestedCommand: 'aws configure',
+    commandExplanation: 'Checks connection profile and region status for simulated cloud accounts.',
+    whyFarmNeedsIt:
+      'Eliminates single points of hardware failure on the farm by shifting workload execution to resilient cloud zones.',
+  },
+  'cloud.vpc': {
+    id: 'cloud.vpc',
+    title: '🌐 Virtual Private Cloud (VPC) & CIDR',
+    category: 'cloud',
+    readTimeSeconds: 60,
+    summary: 'A VPC is an isolated private network within the cloud defined by a CIDR IP block.',
+    explanation:
+      'CIDR notation like `10.10.0.0/16` defines a pool of 65,536 private IP addresses that you control. Resources launched inside this VPC are completely shielded from other cloud tenants.',
+    suggestedCommand: 'aws ec2 describe-instances',
+    commandExplanation: 'Queries compute instances and their attached VPC network IDs.',
+    whyFarmNeedsIt:
+      'Provides a clean solarpunk network boundary where public edge compute and private databases communicate securely.',
+  },
+  'cloud.subnet': {
+    id: 'cloud.subnet',
+    title: '🛡️ Subnets: Public vs Private Segregation',
+    category: 'cloud',
+    readTimeSeconds: 55,
+    summary: 'Subnets subdivide a VPC CIDR into distinct network segments with tailored routing.',
+    explanation:
+      'A public subnet (`10.10.1.0/24`) connects to an Internet Gateway for inbound traffic. A private subnet (`10.10.2.0/24`) has no direct internet route, safeguarding databases from external threats.',
+    suggestedCommand: 'aws ec2 describe-instances',
+    commandExplanation: 'Displays subnet associations and IP allocations for cloud compute instances.',
+    whyFarmNeedsIt:
+      'Zero-trust security requires keeping sensitive harvest databases in private subnets unreachable from the web.',
+  },
+  'cloud.ec2': {
+    id: 'cloud.ec2',
+    title: '💻 Cloud Virtual Machines: Amazon EC2',
+    category: 'cloud',
+    readTimeSeconds: 50,
+    summary: 'EC2 provides resizable virtual machine compute capacity in the cloud.',
+    explanation:
+      'Virtual machines like `t3.micro` run full Linux kernels in the cloud. You can deploy Docker containers or node processes onto them, scale their memory, and start or stop them on demand.',
+    suggestedCommand: 'aws ec2 describe-instances',
+    commandExplanation: 'Lists running EC2 virtual machines, their instance types, state, and IP addresses.',
+    whyFarmNeedsIt:
+      'Hosts the Greenhouse Controller with high availability, ensuring climate automation never stalls.',
+  },
+  'cloud.rds': {
+    id: 'cloud.rds',
+    title: '🗄️ Managed Databases: Amazon RDS',
+    category: 'cloud',
+    readTimeSeconds: 55,
+    summary: 'Managed database services automate provisioning, backups, patching, and storage scaling.',
+    explanation:
+      'Instead of administering raw PostgreSQL inside a VM, RDS provides a resilient database instance with an internal DNS endpoint (`greenhouse-db.internal:5432`) and automated snapshots.',
+    suggestedCommand: 'aws rds describe-db-instances',
+    commandExplanation: 'Inspects managed database status, endpoints, and subnet placement.',
+    whyFarmNeedsIt:
+      'Protects decades of agricultural telemetry and crop yield data from corruption and data loss.',
+  },
+  'cloud.s3': {
+    id: 'cloud.s3',
+    title: '📦 Cloud Object Storage: Amazon S3',
+    category: 'cloud',
+    readTimeSeconds: 50,
+    summary: 'Object storage stores unstructured files and telemetry outside the VPC subnet hierarchy.',
+    explanation:
+      'Unlike block storage attached to a single VM, S3 buckets are accessible via HTTP APIs from anywhere in the cloud, offering 99.999999999% durability for long-term telemetry archives.',
+    suggestedCommand: 'aws s3 ls',
+    commandExplanation: 'Lists available S3 buckets and archived telemetry objects.',
+    whyFarmNeedsIt:
+      'Provides permanent archiving for farm climate history without exhausting expensive database disk volumes.',
+  },
+  'cloud.security-group': {
+    id: 'cloud.security-group',
+    title: '🔒 Cloud Security Groups & Network Rules',
+    category: 'cloud',
+    readTimeSeconds: 60,
+    summary: 'Security groups act as virtual firewalls controlling traffic between compute and database tiers.',
+    explanation:
+      'Default cloud security blocks all incoming traffic. To allow Greenhouse compute to talk to RDS, you must explicitly add an ALLOW rule for TCP port 5432 originating from the `greenhouse-app` security group.',
+    suggestedCommand: 'aws ec2 describe-security-groups',
+    commandExplanation: 'Displays active security groups, rule definitions, and ingress permissions.',
+    whyFarmNeedsIt:
+      'If the rule is blocked or disabled, the greenhouse controller experiences connection refused and farm optimization stops.',
+  },
+  'cloud.cloud-migration': {
+    id: 'cloud.cloud-migration',
+    title: '🚀 Cloud Migration Pipeline & Localhost Pitfalls',
+    category: 'cloud',
+    readTimeSeconds: 65,
+    summary: 'Migration transitions workloads through Preparing, Migrating, Verifying, and Complete states.',
+    explanation:
+      'A classic migration pitfall is leaving `DATABASE_URL` pointing to `localhost:5432`. On cloud compute, `localhost` refers to the VM container itself, not the database! You must update the URL to point to the managed database endpoint.',
+    suggestedCommand: 'curl -I https://greenhouse.solar-grove.local',
+    commandExplanation: 'Verifies the migrated cloud application is reachable via edge reverse proxy.',
+    whyFarmNeedsIt:
+      'Safely promotes the farm software from local prototype hardware to production enterprise cloud.',
+  },
 };
+

@@ -387,5 +387,234 @@ export const OBJECTIVES: ProgressionObjective[] = [
     completed: false,
     rewardGold: 250,
   },
+  {
+    id: 'obj-21-cloud-account',
+    index: 21,
+    title: 'Goal 21 — Provision Cloud Account',
+    solarpunkTitle: '☁️ Solarpunk Cloud Frontier',
+    description:
+      'Open the Cloud Console on Pixel PC or execute `aws configure` in Terminal to connect to simulated AWS or GCP infrastructure.',
+    requirements: [
+      {
+        type: 'cloud-account',
+        description: 'Configure simulated AWS or GCP cloud environment (0/1)',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 100,
+  },
+  {
+    id: 'obj-22-cloud-vpc',
+    index: 22,
+    title: 'Goal 22 — Construct Virtual Private Cloud',
+    solarpunkTitle: '🌐 Isolated Cloud Enclave',
+    description:
+      'Establish a dedicated Virtual Private Cloud (VPC) with CIDR block `10.10.0.0/16` for farm cloud workloads.',
+    requirements: [
+      {
+        type: 'cloud-vpc',
+        description: 'Provision VPC solar-vpc-prod (10.10.0.0/16) (0/1)',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 120,
+  },
+  {
+    id: 'obj-23-cloud-subnets',
+    index: 23,
+    title: 'Goal 23 — Subnet Segmentation',
+    solarpunkTitle: '🛡️ Public & Private Subnet Topology',
+    description:
+      'Divide the VPC into a public subnet (`10.10.1.0/24`) for compute workloads and a private isolated subnet (`10.10.2.0/24`) for databases.',
+    requirements: [
+      {
+        type: 'cloud-subnets',
+        description: 'Configure public (10.10.1.0/24) and private (10.10.2.0/24) subnets (0/2)',
+        target: 2,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 150,
+  },
+  {
+    id: 'obj-24-launch-compute',
+    index: 24,
+    title: 'Goal 24 — Launch Cloud Compute',
+    solarpunkTitle: '⚡ Scalable Virtual Compute',
+    description:
+      'Launch an EC2 / Compute Engine virtual machine instance (`i-greenhouse-01`) in the public subnet.',
+    requirements: [
+      {
+        type: 'cloud-compute',
+        description: 'Launch cloud compute instance in public subnet (0/1)',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 150,
+  },
+  {
+    id: 'obj-25-deploy-cloud-greenhouse',
+    index: 25,
+    title: 'Goal 25 — Deploy Greenhouse Workload to Cloud',
+    solarpunkTitle: '🌱 Cloud-Native Glasshouse Controller',
+    description:
+      'Deploy the Greenhouse Controller service onto the running cloud compute instance.',
+    requirements: [
+      {
+        type: 'cloud-workload',
+        description: 'Deploy greenhouse controller application to cloud compute (0/1)',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 180,
+  },
+  {
+    id: 'obj-26-provision-rds',
+    index: 26,
+    title: 'Goal 26 — Provision Managed PostgreSQL',
+    solarpunkTitle: '🗄️ Managed Relational Database',
+    description:
+      'Provision an Amazon RDS / Cloud SQL managed PostgreSQL instance (`greenhouse-db`) inside the private subnet.',
+    requirements: [
+      {
+        type: 'cloud-database',
+        description: 'Provision managed PostgreSQL in private subnet (0/1)',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 200,
+  },
+  {
+    id: 'obj-27-connect-db',
+    index: 27,
+    title: 'Goal 27 — Configure Managed Database Endpoint',
+    solarpunkTitle: '🔌 Cloud Endpoint Resolution',
+    description:
+      'Update the Greenhouse Controller `DATABASE_URL` to point to the managed database endpoint (`greenhouse-db.internal:5432`).',
+    requirements: [
+      {
+        type: 'cloud-db-endpoint',
+        description: 'Set DATABASE_URL to greenhouse-db.internal:5432 (0/1)',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 180,
+  },
+  {
+    id: 'obj-28-private-isolation',
+    index: 28,
+    title: 'Goal 28 — Enforce Private Database Isolation',
+    solarpunkTitle: '🔒 Zero-Trust Subnet Isolation',
+    description:
+      'Verify that managed PostgreSQL is not exposed to the public internet and resides strictly within the private subnet.',
+    requirements: [
+      {
+        type: 'cloud-private-isolation',
+        description: 'Confirm database is not publicly accessible (0/1)',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 160,
+  },
+  {
+    id: 'obj-29-security-groups',
+    index: 29,
+    title: 'Goal 29 — Configure Cloud Security Groups',
+    solarpunkTitle: '🛡️ Compute-to-Database Security Rules',
+    description:
+      'Authorize an ingress rule on port 5432 allowing traffic from the compute source (`greenhouse-app`) to the managed database (`greenhouse-db`).',
+    requirements: [
+      {
+        type: 'cloud-security-group',
+        description: 'Authorize TCP 5432 from greenhouse-app to greenhouse-db (0/1)',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 200,
+  },
+  {
+    id: 'obj-30-migrate-to-cloud',
+    index: 30,
+    title: 'Goal 30 — Complete Cloud Migration Transition',
+    solarpunkTitle: '🚀 Live Workload Cloud Migration',
+    description:
+      'Execute the 4-step migration pipeline in Cloud Console (`PREPARING` -> `MIGRATING` -> `VERIFYING` -> `COMPLETE`), updating Helio Relay edge routing to the cloud compute upstream.',
+    requirements: [
+      {
+        type: 'cloud-migration',
+        description: 'Successfully complete 4-step migration workflow (0/1)',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 300,
+  },
+  {
+    id: 'obj-31-object-storage',
+    index: 31,
+    title: 'Goal 31 — Archive Telemetry to Object Storage',
+    solarpunkTitle: '📦 Managed Cloud Object Storage',
+    description:
+      'Provision an S3 / Cloud Storage bucket outside the VPC under Managed Services and archive farm telemetry records using Cloud Console or `aws s3 ls`.',
+    requirements: [
+      {
+        type: 'cloud-storage',
+        description: 'Archive sensor telemetry to S3 / Cloud Storage bucket (0/1)',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 250,
+  },
+  {
+    id: 'obj-phase-5-final',
+    index: 32,
+    title: 'Final Phase 5 Objective — Production Cloud Operations',
+    solarpunkTitle: '🌟 The Solarpunk Cloud Enterprise',
+    description:
+      'Operate the farm using production cloud infrastructure: verify both irrigation and greenhouse systems are online, Helio Relay is forwarding HTTPS traffic, and cloud greenhouse optimization is actively boosting crops by +50%.',
+    requirements: [
+      {
+        type: 'production-cloud',
+        description: 'Operate farm on production cloud architecture with active crop boost (0/1)',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 500,
+  },
 ];
+
 

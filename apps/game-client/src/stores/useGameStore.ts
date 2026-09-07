@@ -129,6 +129,25 @@ const initialKnowledge: PlayerKnowledgeMap = {
   'cloud.compute': { status: 'UNKNOWN', timesUsed: 0 },
   'cloud.storage': { status: 'UNKNOWN', timesUsed: 0 },
   'cloud.monitoring': { status: 'UNKNOWN', timesUsed: 0 },
+  'cloud.computing': { status: 'UNKNOWN', timesUsed: 0 },
+  'cloud.aws': { status: 'UNKNOWN', timesUsed: 0 },
+  'cloud.gcp': { status: 'UNKNOWN', timesUsed: 0 },
+  'cloud.vpc': { status: 'UNKNOWN', timesUsed: 0 },
+  'cloud.subnet': { status: 'UNKNOWN', timesUsed: 0 },
+  'cloud.public-subnet': { status: 'UNKNOWN', timesUsed: 0 },
+  'cloud.private-subnet': { status: 'UNKNOWN', timesUsed: 0 },
+  'cloud.ec2': { status: 'UNKNOWN', timesUsed: 0 },
+  'cloud.compute-engine': { status: 'UNKNOWN', timesUsed: 0 },
+  'cloud.object-storage': { status: 'UNKNOWN', timesUsed: 0 },
+  'cloud.s3': { status: 'UNKNOWN', timesUsed: 0 },
+  'cloud.cloud-storage': { status: 'UNKNOWN', timesUsed: 0 },
+  'cloud.managed-database': { status: 'UNKNOWN', timesUsed: 0 },
+  'cloud.rds': { status: 'UNKNOWN', timesUsed: 0 },
+  'cloud.cloud-sql': { status: 'UNKNOWN', timesUsed: 0 },
+  'cloud.security-group': { status: 'UNKNOWN', timesUsed: 0 },
+  'cloud.cloud-firewall': { status: 'UNKNOWN', timesUsed: 0 },
+  'cloud.cloud-costs': { status: 'UNKNOWN', timesUsed: 0 },
+  'cloud.cloud-migration': { status: 'UNKNOWN', timesUsed: 0 },
 };
 
 // Initial starter crops planted in farm plot
@@ -946,6 +965,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
       get().practiceConcept('networking.upstream');
     }
 
+    // Phase 5: Cloud CLI tracking
+    if (lower.startsWith('aws')) {
+      get().practiceConcept('cloud.aws');
+      if (lower.includes('ec2')) get().practiceConcept('cloud.ec2');
+      if (lower.includes('rds')) get().practiceConcept('cloud.rds');
+      if (lower.includes('s3')) get().practiceConcept('cloud.s3');
+      if (lower.includes('security-groups')) get().practiceConcept('cloud.security-group');
+    }
+
+    if (lower.startsWith('gcloud')) {
+      get().practiceConcept('cloud.gcp');
+      if (lower.includes('compute')) get().practiceConcept('cloud.compute-engine');
+      if (lower.includes('sql')) get().practiceConcept('cloud.cloud-sql');
+      if (lower.includes('storage')) get().practiceConcept('cloud.cloud-storage');
+      if (lower.includes('firewall-rules')) get().practiceConcept('cloud.cloud-firewall');
+    }
+
     get().checkMilestones();
 
     return result.stdout + extraOutput;
@@ -990,6 +1026,45 @@ export const useGameStore = create<GameStore>((set, get) => ({
               r.upstreamPort === 8080 &&
               r.tlsRequired
           );
+        } else if (req.type === 'cloud-account') {
+          satisfied = serviceManager.getCloudAccounts().length > 0;
+        } else if (req.type === 'cloud-vpc') {
+          satisfied = serviceManager.getCloudVpcs().length > 0;
+        } else if (req.type === 'cloud-subnets') {
+          const subnets = serviceManager.getCloudSubnets();
+          const pub = subnets.some((s) => s.type === 'public');
+          const priv = subnets.some((s) => s.type === 'private');
+          req.current = (pub ? 1 : 0) + (priv ? 1 : 0);
+          satisfied = pub && priv;
+        } else if (req.type === 'cloud-compute') {
+          const instances = serviceManager.getCloudComputeInstances();
+          satisfied = instances.some((i) => i.status === 'RUNNING');
+        } else if (req.type === 'cloud-workload') {
+          const instances = serviceManager.getCloudComputeInstances();
+          satisfied = instances.some((i) => i.deployedApp === 'greenhouse-controller');
+        } else if (req.type === 'cloud-database') {
+          const dbs = serviceManager.getCloudDatabases();
+          satisfied = dbs.some((d) => d.status === 'AVAILABLE' && d.engine === 'postgresql');
+        } else if (req.type === 'cloud-db-endpoint') {
+          const compute = serviceManager.getCloudComputeInstance('i-greenhouse-01');
+          satisfied = !!compute?.environment.DATABASE_URL?.includes('greenhouse-db.internal');
+        } else if (req.type === 'cloud-private-isolation') {
+          const dbs = serviceManager.getCloudDatabases();
+          satisfied = dbs.some((d) => !d.isPubliclyAccessible);
+        } else if (req.type === 'cloud-security-group') {
+          const reachability = serviceManager.getCloudManager().evaluateConnectivity('greenhouse-app', 'greenhouse-db', 5432);
+          satisfied = reachability.allowed;
+        } else if (req.type === 'cloud-migration') {
+          const prog = serviceManager.getCloudMigrationProgress();
+          satisfied = prog.phase === 'COMPLETE';
+        } else if (req.type === 'cloud-storage') {
+          const buckets = serviceManager.getCloudBuckets();
+          satisfied = buckets.some((b) => b.objects.length >= 2);
+        } else if (req.type === 'production-cloud') {
+          const isCloud = serviceManager.getDeploymentTarget() === 'cloud';
+          const isOptimized = serviceManager.isGreenhouseOptimized();
+          const noIncidents = get().activeIncidents.length === 0;
+          satisfied = isCloud && isOptimized && noIncidents;
         }
 
         if (satisfied) {
@@ -1068,19 +1143,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
           b.irrigationActive = false;
         }
       } else if (b.type === 'verdant-glasshouse') {
-        const c = serviceManager.findContainer('greenhouse-controller');
-        if (c?.status === 'RUNNING' && c.health === 'HEALTHY') {
-          b.status = 'healthy';
-          b.softwareStatus = 'HEALTHY';
-        } else if (c?.status === 'RUNNING' && c.health === 'UNHEALTHY') {
-          b.status = 'failed';
-          b.softwareStatus = 'UNHEALTHY';
-        } else if (c?.status === 'STOPPED') {
-          b.status = 'offline';
-          b.softwareStatus = 'STOPPED';
+        if (serviceManager.getDeploymentTarget() === 'cloud') {
+          const isOpt = serviceManager.isGreenhouseOptimized();
+          b.status = isOpt ? 'healthy' : 'failed';
+          b.softwareStatus = isOpt ? 'HEALTHY' : 'UNHEALTHY';
         } else {
-          b.status = 'offline';
-          b.softwareStatus = 'NOT_DEPLOYED';
+          const c = serviceManager.findContainer('greenhouse-controller');
+          if (c?.status === 'RUNNING' && c.health === 'HEALTHY') {
+            b.status = 'healthy';
+            b.softwareStatus = 'HEALTHY';
+          } else if (c?.status === 'RUNNING' && c.health === 'UNHEALTHY') {
+            b.status = 'failed';
+            b.softwareStatus = 'UNHEALTHY';
+          } else if (c?.status === 'STOPPED') {
+            b.status = 'offline';
+            b.softwareStatus = 'STOPPED';
+          } else {
+            b.status = 'offline';
+            b.softwareStatus = 'NOT_DEPLOYED';
+          }
         }
       } else if (b.type === 'helio-relay') {
         const s = serviceManager.getService('helio-relay');

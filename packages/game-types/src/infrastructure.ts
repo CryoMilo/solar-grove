@@ -1,4 +1,5 @@
 export type CloudProviderType = 'local' | 'aws' | 'gcp';
+export type CloudProvider = 'aws' | 'gcp';
 
 export type SoftwareDeploymentStatus =
   | 'NOT_DEPLOYED'
@@ -204,6 +205,129 @@ export interface ReverseProxyState {
   upstreamFailures?: number;
 }
 
+export type DeploymentTarget = 'local' | 'cloud';
+
+export interface CloudAccount {
+  id: string; // e.g. 'sim-aws-001' or 'solar-grove-prod'
+  name: string;
+  provider: 'aws' | 'gcp';
+  region: string; // 'ap-southeast-1' or 'asia-southeast1'
+  status: 'ACTIVE' | 'DEGRADED' | 'CONFIGURING';
+  credentialsStatus: 'SIMULATED';
+  createdAt: number;
+}
+
+export interface CloudVpc {
+  id: string; // e.g. 'vpc-solar-01'
+  name: string;
+  cidrBlock: string; // '10.10.0.0/16'
+  provider: 'aws' | 'gcp';
+  region: string;
+  subnets: string[]; // Subnet IDs
+  isDefault: boolean;
+}
+
+export interface CloudSubnet {
+  id: string; // 'subnet-public-01', 'subnet-private-01'
+  vpcId: string;
+  name: string;
+  cidrBlock: string; // '10.10.1.0/24' (public), '10.10.2.0/24' (private)
+  type: 'public' | 'private';
+  availabilityZone: string;
+  routeTableId: string;
+  gatewayAttached?: boolean; // IGW attached for public
+}
+
+export interface NetworkRule {
+  id: string;
+  name: string;
+  sourceType: 'cidr' | 'security-group' | 'instance';
+  source: string; // e.g. 'greenhouse-app' or '10.10.1.0/24'
+  destination: string; // e.g. 'greenhouse-db' or '10.10.2.15'
+  protocol: 'tcp';
+  port: number; // e.g. 5432
+  action: 'ALLOW' | 'DENY';
+  enabled: boolean;
+  description?: string;
+  provider?: 'aws' | 'gcp';
+}
+
+export interface CloudComputeInstance {
+  id: string; // 'i-greenhouse-01'
+  name: string;
+  provider: 'aws' | 'gcp';
+  instanceType: string; // 't3.micro' or 'e2-micro'
+  status: 'PROVISIONING' | 'RUNNING' | 'STOPPED' | 'TERMINATED' | 'FAILED';
+  publicIp?: string; // '13.250.14.22'
+  privateIp: string; // '10.10.1.10'
+  vpcId: string;
+  subnetId: string;
+  securityGroups: string[]; // ['greenhouse-app']
+  deployedApp?: string; // 'greenhouse-controller'
+  environment: Record<string, string>;
+  costPerHour: number;
+  uptimeSeconds: number;
+  cpuUsagePercent: number;
+  memoryUsagePercent: number;
+}
+
+export interface ManagedDatabaseInstance {
+  id: string; // 'db-greenhouse-pg'
+  name: string;
+  provider: 'aws' | 'gcp';
+  engine: 'postgresql';
+  version: string;
+  status: 'CREATING' | 'AVAILABLE' | 'STOPPED' | 'FAILED';
+  endpoint: string; // 'greenhouse-db.internal' or 'greenhouse-pg.sim-aws.rds'
+  port: number; // 5432
+  vpcId: string;
+  subnetId: string; // private subnet
+  securityGroups: string[]; // ['greenhouse-db']
+  database: string;
+  masterUsername: string;
+  isPubliclyAccessible: boolean;
+  storageGb: number;
+  costPerHour: number;
+}
+
+export interface ObjectStorageObject {
+  key: string;
+  sizeBytes: number;
+  lastModified: string;
+  contentType: string;
+  dataSummary?: string;
+}
+
+export interface ObjectStorageBucket {
+  id: string; // 'solar-grove-telemetry-archive'
+  name: string;
+  provider: 'aws' | 'gcp';
+  region: string;
+  isPublic: boolean;
+  createdAt: string;
+  objects: ObjectStorageObject[];
+  storageBytes: number;
+  costPerHour: number;
+}
+
+export type CloudMigrationPhase =
+  | 'IDLE'
+  | 'PREPARING'
+  | 'MIGRATING'
+  | 'VERIFYING'
+  | 'COMPLETE'
+  | 'FAILED';
+
+export interface CloudMigrationProgress {
+  phase: CloudMigrationPhase;
+  step: number; // 0..4
+  totalSteps: number; // 4
+  currentTask: string;
+  logs: string[];
+  failureReason?: string;
+  completedAt?: number;
+}
+
 export type IncidentType =
   | 'process-crash'
   | 'wrong-port'
@@ -213,7 +337,12 @@ export type IncidentType =
   | 'greenhouse-auth-failure'
   | 'container-crash'
   | 'bad-upstream'
-  | 'cert-missing';
+  | 'cert-missing'
+  | 'cloud-security-group-blocked'
+  | 'cloud-wrong-db-endpoint'
+  | 'cloud-public-database'
+  | 'cloud-compute-stopped'
+  | 'cloud-region-degraded';
 
 export interface Incident {
   id: string;
@@ -230,3 +359,4 @@ export interface Incident {
   remediationHint: string;
   suggestedCommand: string;
 }
+

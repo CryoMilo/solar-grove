@@ -32,7 +32,19 @@ export interface ObjectiveRequirement {
     | 'route-repair'
     | 'cert-install'
     | 'https-access'
-    | 'public-irrigation';
+    | 'public-irrigation'
+    | 'cloud-account'
+    | 'cloud-vpc'
+    | 'cloud-subnets'
+    | 'cloud-compute'
+    | 'cloud-workload'
+    | 'cloud-database'
+    | 'cloud-db-endpoint'
+    | 'cloud-private-isolation'
+    | 'cloud-security-group'
+    | 'cloud-migration'
+    | 'cloud-storage'
+    | 'production-cloud';
   description: string;
   target: number;
   current: number;

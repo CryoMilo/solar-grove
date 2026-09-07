@@ -74,6 +74,8 @@ export class CommandEngine {
         '  ls [path]              List directory contents',
         '  cat <file>             Concatenate and display files',
         '  status                 Quick health check of farm infrastructure',
+        '  aws <cmd>              Simulated AWS CLI (ec2, rds, s3, configure)',
+        '  gcloud <cmd>           Simulated GCP CLI (compute, sql, storage, firewall-rules)',
         '  clear                  Clear the terminal screen',
         '  help                   Display this manual',
         '',
@@ -1145,5 +1147,364 @@ export class CommandEngine {
     this.register('clear', () => {
       return { stdout: '\x1b[2J\x1b[3J\x1b[H', exitCode: 0 };
     });
+
+    // ==========================================
+    // --- Phase 5: Simulated Cloud CLIs (AWS & GCP) ---
+    // ==========================================
+
+    // AWS CLI (SIMULATED)
+    this.register('aws', (args, sm) => {
+      if (args.length === 0 || args[0] === '--help') {
+        const out = [
+          'Solar Grove Simulated AWS CLI (v2.15.0)',
+          '',
+          'usage: aws [options] <command> <subcommand> [parameters]',
+          '',
+          'Available Commands:',
+          '  configure              Display simulated AWS environment profile',
+          '  ec2 describe-instances Describe EC2 virtual machine instances',
+          '  ec2 start-instances    Start stopped EC2 instances (--instance-ids)',
+          '  ec2 stop-instances     Stop running EC2 instances (--instance-ids)',
+          '  ec2 describe-security-groups Describe VPC security groups and rules',
+          '  ec2 authorize-security-group-ingress Enable security group ingress rule',
+          '  rds describe-db-instances Describe managed PostgreSQL database instances',
+          '  s3 ls [bucket]         List S3 telemetry buckets and archived objects',
+          '',
+        ].join('\r\n');
+        return { stdout: out, exitCode: 0, unlockedCompetency: 'cloud.aws' };
+      }
+
+      const sub1 = args[0].toLowerCase();
+      const sub2 = (args[1] || '').toLowerCase();
+
+      if (sub1 === 'configure') {
+        const out = [
+          'Solar Grove Simulated AWS Environment',
+          'Account: sim-aws-001',
+          'Region: ap-southeast-1',
+          'Credentials: SIMULATED',
+          'External AWS connection: NONE',
+          '',
+        ].join('\r\n');
+        return { stdout: out, exitCode: 0, unlockedCompetency: 'cloud.aws' };
+      }
+
+      if (sub1 === 'ec2') {
+        if (sub2 === 'describe-instances') {
+          const instances = sm.getCloudComputeInstances();
+          const jsonOut = {
+            Reservations: [
+              {
+                ReservationId: 'r-0a817f54c82b',
+                Instances: instances.map((inst) => ({
+                  InstanceId: inst.id,
+                  InstanceType: inst.instanceType,
+                  State: {
+                    Code: inst.status === 'RUNNING' ? 16 : 80,
+                    Name: inst.status.toLowerCase(),
+                  },
+                  PrivateIpAddress: inst.privateIp,
+                  PublicIpAddress: inst.publicIp,
+                  SubnetId: inst.subnetId,
+                  VpcId: inst.vpcId,
+                  SecurityGroups: inst.securityGroups.map((sg) => ({ GroupName: sg, GroupId: `sg-${sg}` })),
+                  Tags: [{ Key: 'Name', Value: inst.name }, { Key: 'Role', Value: inst.deployedApp || 'workload' }],
+                })),
+              },
+            ],
+          };
+          return {
+            stdout: JSON.stringify(jsonOut, null, 2) + '\r\n',
+            exitCode: 0,
+            unlockedCompetency: 'cloud.ec2',
+          };
+        }
+
+        if (sub2 === 'start-instances') {
+          const idIdx = args.indexOf('--instance-ids');
+          const targetId = idIdx !== -1 && args[idIdx + 1] ? args[idIdx + 1] : 'i-greenhouse-01';
+          const success = sm.getCloudManager().startComputeInstance(targetId);
+          if (success) {
+            const out = {
+              StartingInstances: [
+                {
+                  InstanceId: targetId,
+                  CurrentState: { Code: 16, Name: 'running' },
+                  PreviousState: { Code: 80, Name: 'stopped' },
+                },
+              ],
+            };
+            return { stdout: JSON.stringify(out, null, 2) + '\r\n', exitCode: 0, unlockedCompetency: 'cloud.ec2' };
+          }
+          return { stdout: `An error occurred (InvalidInstanceID.NotFound) when calling start-instances: ${targetId}\r\n`, exitCode: 1 };
+        }
+
+        if (sub2 === 'stop-instances') {
+          const idIdx = args.indexOf('--instance-ids');
+          const targetId = idIdx !== -1 && args[idIdx + 1] ? args[idIdx + 1] : 'i-greenhouse-01';
+          const success = sm.getCloudManager().stopComputeInstance(targetId);
+          if (success) {
+            const out = {
+              StoppingInstances: [
+                {
+                  InstanceId: targetId,
+                  CurrentState: { Code: 80, Name: 'stopped' },
+                  PreviousState: { Code: 16, Name: 'running' },
+                },
+              ],
+            };
+            return { stdout: JSON.stringify(out, null, 2) + '\r\n', exitCode: 0, unlockedCompetency: 'cloud.ec2' };
+          }
+          return { stdout: `An error occurred (InvalidInstanceID.NotFound) when calling stop-instances: ${targetId}\r\n`, exitCode: 1 };
+        }
+
+        if (sub2 === 'describe-security-groups') {
+          const rules = sm.getNetworkRules();
+          const jsonOut = {
+            SecurityGroups: [
+              {
+                GroupId: 'sg-greenhouse-app',
+                GroupName: 'greenhouse-app',
+                Description: 'Security group for Greenhouse Controller compute instances',
+                VpcId: 'vpc-solar-01',
+                IpPermissions: rules.filter((r) => r.destination === 'greenhouse-app').map((r) => ({
+                  FromPort: r.port,
+                  ToPort: r.port,
+                  IpProtocol: r.protocol,
+                  IpRanges: [{ CidrIp: r.source, Description: r.description }],
+                })),
+              },
+              {
+                GroupId: 'sg-greenhouse-db',
+                GroupName: 'greenhouse-db',
+                Description: 'Security group for Managed PostgreSQL instance',
+                VpcId: 'vpc-solar-01',
+                IpPermissions: rules.filter((r) => r.destination === 'greenhouse-db').map((r) => ({
+                  FromPort: r.port,
+                  ToPort: r.port,
+                  IpProtocol: r.protocol,
+                  Status: r.enabled ? 'ENABLED' : 'DISABLED',
+                  UserIdGroupPairs: [{ GroupName: r.source, Description: r.description }],
+                })),
+              },
+            ],
+          };
+          return {
+            stdout: JSON.stringify(jsonOut, null, 2) + '\r\n',
+            exitCode: 0,
+            unlockedCompetency: 'cloud.security-group',
+          };
+        }
+
+        if (sub2 === 'authorize-security-group-ingress') {
+          sm.setCloudRuleEnabled('rule-app-to-db', true);
+          return {
+            stdout: '{\n  "Return": true\n}\r\n',
+            exitCode: 0,
+            unlockedCompetency: 'cloud.security-group',
+          };
+        }
+      }
+
+      if (sub1 === 'rds') {
+        if (sub2 === 'describe-db-instances') {
+          const dbs = sm.getCloudDatabases();
+          const jsonOut = {
+            DBInstances: dbs.map((db) => ({
+              DBInstanceIdentifier: db.name,
+              DBInstanceClass: 'db.t3.micro',
+              Engine: db.engine,
+              EngineVersion: db.version,
+              DBInstanceStatus: db.status.toLowerCase(),
+              Endpoint: {
+                Address: db.endpoint,
+                Port: db.port,
+                HostedZoneId: 'Z2FDTNDATAQYW2',
+              },
+              AllocatedStorage: db.storageGb,
+              PubliclyAccessible: db.isPubliclyAccessible,
+              VpcSecurityGroups: db.securityGroups.map((sg) => ({
+                VpcSecurityGroupId: `sg-${sg}`,
+                Status: 'active',
+              })),
+              DBSubnetGroup: {
+                DBSubnetGroupName: 'solar-private-db-subnet-group',
+                VpcId: db.vpcId,
+                SubnetGroupStatus: 'Complete',
+              },
+            })),
+          };
+          return {
+            stdout: JSON.stringify(jsonOut, null, 2) + '\r\n',
+            exitCode: 0,
+            unlockedCompetency: 'cloud.rds',
+          };
+        }
+      }
+
+      if (sub1 === 's3') {
+        if (sub2 === 'ls') {
+          const targetBucket = args[2];
+          const buckets = sm.getCloudBuckets();
+
+          if (!targetBucket) {
+            const lines = buckets.map((b) => `${b.createdAt.substring(0, 10)} 12:00:00 ${b.name}`);
+            return { stdout: lines.join('\r\n') + '\r\n', exitCode: 0, unlockedCompetency: 'cloud.s3' };
+          }
+
+          const cleanBucket = targetBucket.replace(/^s3:\/\//, '').replace(/\/$/, '');
+          const b = buckets.find((bucket) => bucket.name === cleanBucket || bucket.id === cleanBucket);
+          if (!b) {
+            return { stdout: `The specified bucket does not exist: ${cleanBucket}\r\n`, exitCode: 1 };
+          }
+
+          const lines = b.objects.map(
+            (obj) => `${obj.lastModified.substring(0, 19).replace('T', ' ')} ${String(obj.sizeBytes).padStart(9, ' ')} ${obj.key}`
+          );
+          return {
+            stdout: lines.join('\r\n') + '\r\n',
+            exitCode: 0,
+            unlockedCompetency: 'cloud.s3',
+          };
+        }
+      }
+
+      return {
+        stdout: `Unknown aws command: ${args.join(' ')}. Type 'aws --help' for usage.\r\n`,
+        exitCode: 1,
+      };
+    });
+
+    // GCLOUD CLI (SIMULATED)
+    this.register('gcloud', (args, sm) => {
+      if (args.length === 0 || args[0] === '--help') {
+        const out = [
+          'Google Cloud SDK 465.0.0 (SIMULATED)',
+          '',
+          'Usage: gcloud [GROUP] [COMMAND] [ARGS]',
+          '',
+          'Available Groups:',
+          '  compute instances list     List Google Compute Engine VM instances',
+          '  compute instances start    Start VM instance (e.g. gcloud compute instances start greenhouse-controller-vm)',
+          '  compute instances stop     Stop VM instance',
+          '  compute firewall-rules list List VPC firewall rules',
+          '  sql instances list         List Cloud SQL PostgreSQL instances',
+          '  storage ls [bucket]        List Cloud Storage buckets and objects',
+          '',
+        ].join('\r\n');
+        return { stdout: out, exitCode: 0, unlockedCompetency: 'cloud.gcp' };
+      }
+
+      const group = args[0].toLowerCase();
+      const sub1 = (args[1] || '').toLowerCase();
+      const sub2 = (args[2] || '').toLowerCase();
+
+      if (group === 'compute') {
+        if (sub1 === 'instances') {
+          if (sub2 === 'list') {
+            const instances = sm.getCloudComputeInstances();
+            const lines = [
+              'NAME                      ZONE            MACHINE_TYPE  PREEMPTIBLE  INTERNAL_IP  EXTERNAL_IP    STATUS',
+            ];
+            for (const inst of instances) {
+              const name = inst.name.padEnd(25, ' ');
+              const zone = 'asia-southeast1-a'.padEnd(16, ' ');
+              const type = 'e2-micro'.padEnd(14, ' ');
+              const prem = '            ';
+              const intIp = inst.privateIp.padEnd(13, ' ');
+              const extIp = (inst.publicIp || '-').padEnd(15, ' ');
+              const status = inst.status;
+              lines.push(`${name} ${zone} ${type}${prem}${intIp}${extIp}${status}`);
+            }
+            return {
+              stdout: lines.join('\r\n') + '\r\n',
+              exitCode: 0,
+              unlockedCompetency: 'cloud.compute-engine',
+            };
+          }
+
+          if (sub2 === 'start') {
+            const name = args[3] || 'greenhouse-controller-vm';
+            sm.getCloudManager().startComputeInstance('i-greenhouse-01');
+            return {
+              stdout: `Starting instance(s) ${name}...\nUpdated [https://compute.googleapis.com/compute/v1/projects/solar-grove-prod/zones/asia-southeast1-a/instances/${name}].\r\n`,
+              exitCode: 0,
+              unlockedCompetency: 'cloud.compute-engine',
+            };
+          }
+
+          if (sub2 === 'stop') {
+            const name = args[3] || 'greenhouse-controller-vm';
+            sm.getCloudManager().stopComputeInstance('i-greenhouse-01');
+            return {
+              stdout: `Stopping instance(s) ${name}...\nUpdated [https://compute.googleapis.com/compute/v1/projects/solar-grove-prod/zones/asia-southeast1-a/instances/${name}].\r\n`,
+              exitCode: 0,
+              unlockedCompetency: 'cloud.compute-engine',
+            };
+          }
+        }
+
+        if (sub1 === 'firewall-rules') {
+          if (sub2 === 'list') {
+            const rules = sm.getNetworkRules();
+            const lines = [
+              'NAME                                NETWORK        DIRECTION  PRIORITY  ALLOW     DENY  DISABLED',
+            ];
+            for (const r of rules) {
+              const name = r.name.padEnd(35, ' ');
+              const net = 'solar-vpc-prod'.padEnd(15, ' ');
+              const dir = 'INGRESS   ';
+              const prio = '1000     ';
+              const allow = r.action === 'ALLOW' ? `tcp:${r.port}`.padEnd(10, ' ') : '          ';
+              const deny = r.action === 'DENY' ? `tcp:${r.port}`.padEnd(6, ' ') : '      ';
+              const disabled = !r.enabled ? 'True' : 'False';
+              lines.push(`${name}${net}${dir}${prio}${allow}${deny}${disabled}`);
+            }
+            return {
+              stdout: lines.join('\r\n') + '\r\n',
+              exitCode: 0,
+              unlockedCompetency: 'cloud.cloud-firewall',
+            };
+          }
+        }
+      }
+
+      if (group === 'sql' && sub1 === 'instances' && sub2 === 'list') {
+        const dbs = sm.getCloudDatabases();
+        const lines = [
+          'NAME           DATABASE_VERSION  LOCATION           TIER              PRIMARY_ADDRESS  STATUS',
+        ];
+        for (const d of dbs) {
+          const name = d.name.padEnd(15, ' ');
+          const ver = 'POSTGRES_16      ';
+          const loc = 'asia-southeast1-a  ';
+          const tier = 'db-f1-micro       ';
+          const addr = d.endpoint.padEnd(17, ' ');
+          const status = d.status === 'AVAILABLE' ? 'RUNNABLE' : d.status;
+          lines.push(`${name}${ver}${loc}${tier}${addr}${status}`);
+        }
+        return {
+          stdout: lines.join('\r\n') + '\r\n',
+          exitCode: 0,
+          unlockedCompetency: 'cloud.cloud-sql',
+        };
+      }
+
+      if (group === 'storage' && sub1 === 'ls') {
+        const buckets = sm.getCloudBuckets();
+        const lines = buckets.map((b) => `gs://${b.name}/`);
+        return {
+          stdout: lines.join('\r\n') + '\r\n',
+          exitCode: 0,
+          unlockedCompetency: 'cloud.cloud-storage',
+        };
+      }
+
+      return {
+        stdout: `Unknown gcloud command: ${args.join(' ')}. Type 'gcloud --help' for usage.\r\n`,
+        exitCode: 1,
+      };
+    });
   }
 }
+

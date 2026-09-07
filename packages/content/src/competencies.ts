@@ -65,8 +65,43 @@ export const COMPETENCIES: CompetencyDefinition[] = [
     id: 'networking.dns',
     name: 'DNS Resolution',
     category: 'networking',
-    description: 'Internal hostname resolution and domain routing.',
+    description: 'Internal hostname resolution, A-records, and domain routing.',
     prerequisites: ['networking.ip'],
+  },
+  {
+    id: 'networking.reverse-proxy',
+    name: 'Reverse Proxy & Gateway',
+    category: 'networking',
+    description: 'Edge gateways, virtual hosts, and dispatching public requests to internal services.',
+    prerequisites: ['networking.dns', 'networking.ports'],
+  },
+  {
+    id: 'networking.upstream',
+    name: 'Upstream Services',
+    category: 'networking',
+    description: 'Configuring backend service targets, socket paths, and diagnosing 502 Bad Gateway errors.',
+    prerequisites: ['networking.reverse-proxy'],
+  },
+  {
+    id: 'networking.tls',
+    name: 'TLS & HTTPS Security',
+    category: 'networking',
+    description: 'Transport Layer Security encryption, port 443 termination, and handshake verification.',
+    prerequisites: ['networking.http', 'networking.reverse-proxy'],
+  },
+  {
+    id: 'networking.certificates',
+    name: 'Certificates & ACME',
+    category: 'networking',
+    description: 'X.509 TLS certificate management, Let’s Encrypt automated ACME issuance, and validation.',
+    prerequisites: ['networking.tls'],
+  },
+  {
+    id: 'networking.http-redirect',
+    name: 'HTTP to HTTPS Redirects',
+    category: 'networking',
+    description: 'Automatic 301 Moved Permanently redirects upgrading plain HTTP traffic to secure HTTPS.',
+    prerequisites: ['networking.http', 'networking.tls'],
   },
 
   // Containers
@@ -301,5 +336,59 @@ export const CONCEPT_DISCOVERIES: Record<string, ConceptDiscovery> = {
       'Automated probes that monitor whether a running container is functioning correctly or degraded.',
     details:
       'Health checks differentiate between a container that is merely running and one that is healthy. If the database connection fails, health becomes UNHEALTHY.',
+  },
+  'networking.dns': {
+    id: 'networking.dns',
+    name: 'DNS A-Records',
+    conceptName: 'DNS RESOLUTION',
+    summary:
+      'Domain Name System translates human-friendly hostnames into machine-routable IP addresses.',
+    details:
+      'A-records map greenhouse.solar-grove.local and irrigation.solar-grove.local to the Helio Relay Gateway IP (10.0.0.10). Query with nslookup or dig.',
+  },
+  'networking.reverse-proxy': {
+    id: 'networking.reverse-proxy',
+    name: 'Reverse Proxy & Gateway',
+    conceptName: 'REVERSE PROXY',
+    summary:
+      'An intermediary server that terminates client requests and forwards them to private internal backends.',
+    details:
+      'Helio Relay runs Nginx listening on port 80 and 443, inspecting the Host header to route traffic to the appropriate farm microservice.',
+  },
+  'networking.upstream': {
+    id: 'networking.upstream',
+    name: 'Upstream Services',
+    conceptName: 'UPSTREAM SERVICE',
+    summary:
+      'Backend servers that the reverse proxy forwards requests to. Misconfigurations cause 502 Bad Gateway.',
+    details:
+      'When the Relay tries to connect to greenhouse-app:4000 instead of greenhouse-controller:4000, the upstream connection fails and Nginx returns 502 Bad Gateway.',
+  },
+  'networking.tls': {
+    id: 'networking.tls',
+    name: 'TLS / HTTPS Security',
+    conceptName: 'TLS ENCRYPTION',
+    summary:
+      'Cryptographic protocol that authenticates servers and encrypts communication over TCP port 443.',
+    details:
+      'TLS terminates at the Helio Relay gateway, protecting credentials and farm sensor telemetry from eavesdropping and tampering.',
+  },
+  'networking.certificates': {
+    id: 'networking.certificates',
+    name: 'Certificates & ACME',
+    conceptName: 'TLS CERTIFICATE',
+    summary:
+      'Digitally signed identity documents issued by Certificate Authorities like Let’s Encrypt via ACME.',
+    details:
+      'Use Certificate Manager to perform automated ACME challenges and install signed certificates onto the Helio Relay.',
+  },
+  'networking.http-redirect': {
+    id: 'networking.http-redirect',
+    name: 'HTTP to HTTPS Redirect',
+    conceptName: '301 REDIRECT',
+    summary:
+      'HTTP status code 301 informs clients to permanently upgrade their connection from plain HTTP to secure HTTPS.',
+    details:
+      'Visiting http://greenhouse.solar-grove.local responds with 301 Moved Permanently and Location: https://greenhouse.solar-grove.local.',
   },
 };

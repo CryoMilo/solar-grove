@@ -150,6 +150,60 @@ export interface InfrastructureMetrics {
   uptimePercent: number;
 }
 
+export interface NetworkHost {
+  hostname: string;
+  ip: string;
+  mac?: string;
+  role: 'gateway' | 'workstation' | 'workload' | 'dns' | 'proxy' | 'container-host' | 'device';
+  description: string;
+  ports: number[];
+  status: 'ONLINE' | 'OFFLINE';
+}
+
+export interface DnsRecord {
+  hostname: string;
+  type: 'A' | 'CNAME';
+  value: string;
+  ttl: number;
+}
+
+export interface ProxyRoute {
+  id: string;
+  hostname: string;
+  path: string;
+  upstreamHost: string;
+  upstreamPort: number;
+  enabled?: boolean;
+  tlsRequired: boolean;
+}
+
+export type CertificateStatus = 'MISSING' | 'PENDING' | 'VALID' | 'EXPIRED' | 'INVALID';
+
+export interface TlsCertificate {
+  id: string;
+  domain: string;
+  issuer: string;
+  status: CertificateStatus;
+  issuedAt?: string;
+  expiresAt?: string;
+  valid: boolean;
+  fingerprint?: string;
+  keyType: string;
+  autoRenew?: boolean;
+}
+
+export interface ReverseProxyState {
+  serviceName: string;
+  status: 'RUNNING' | 'STOPPED' | 'FAILED';
+  listeners: number[];
+  routes: ProxyRoute[];
+  httpRedirectHttps: boolean;
+  activeConnections?: number;
+  requestsPerSecond?: number;
+  tlsTerminatedRequests?: number;
+  upstreamFailures?: number;
+}
+
 export type IncidentType =
   | 'process-crash'
   | 'wrong-port'
@@ -157,7 +211,9 @@ export type IncidentType =
   | 'memory-leak'
   | 'disk-full'
   | 'greenhouse-auth-failure'
-  | 'container-crash';
+  | 'container-crash'
+  | 'bad-upstream'
+  | 'cert-missing';
 
 export interface Incident {
   id: string;

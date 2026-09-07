@@ -285,6 +285,7 @@ export class FarmScene extends Phaser.Scene {
     if (active && type) {
       let texture = 'iso_building_helio_pump';
       if (type === 'verdant-glasshouse') texture = 'iso_building_verdant_glasshouse';
+      else if (type === 'helio-relay') texture = 'iso_building_helio_relay';
       this.ghostBuildingSprite.setTexture(texture);
       this.ghostBuildingSprite.setVisible(true);
     } else {
@@ -339,6 +340,7 @@ export class FarmScene extends Phaser.Scene {
     for (const b of buildings) {
       let texture = 'iso_building_helio_pump';
       if (b.type === 'verdant-glasshouse') texture = 'iso_building_verdant_glasshouse';
+      else if (b.type === 'helio-relay') texture = 'iso_building_helio_relay';
 
       const isoPos = this.gridToIso(b.x, b.y);
       let obj = this.buildingObjects.get(b.id);

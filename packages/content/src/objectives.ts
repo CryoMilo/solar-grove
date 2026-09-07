@@ -270,5 +270,122 @@ export const OBJECTIVES: ProgressionObjective[] = [
     ],
     completed: false,
     rewardGold: 200,
+    unlocksBlueprintId: 'helio-relay',
+  },
+  {
+    id: 'obj-15-build-relay',
+    index: 15,
+    title: 'Goal 15 — Construct Helio Relay Station',
+    solarpunkTitle: '📡 Edge Gateway Infrastructure',
+    description:
+      'Purchase and place the Helio Relay Station on the farm grid (200 G). It acts as our public edge gateway, terminating TLS and routing ingress traffic.',
+    requirements: [
+      {
+        type: 'build',
+        description: 'Construct Helio Relay Station (200 G)',
+        target: 1,
+        current: 0,
+        satisfied: false,
+        targetBuildingType: 'helio-relay',
+      },
+    ],
+    completed: false,
+    rewardGold: 100,
+  },
+  {
+    id: 'obj-16-deploy-gateway',
+    index: 16,
+    title: 'Goal 16 — Deploy Reverse Proxy Service',
+    solarpunkTitle: '🌐 Public Traffic Routing',
+    description:
+      'Start the `helio-relay` Nginx reverse proxy gateway via `systemctl start helio-relay` or the Software Catalog.',
+    requirements: [
+      {
+        type: 'relay-deploy',
+        description: 'Deploy helio-relay edge proxy service',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 100,
+  },
+  {
+    id: 'obj-17-dns-resolution',
+    index: 17,
+    title: 'Goal 17 — Verify Edge DNS Resolution',
+    solarpunkTitle: '🗺️ Network Domain Resolution',
+    description:
+      'Use `nslookup` or `dig` in the Terminal to verify `greenhouse.solar-grove.local` resolves to edge relay IP `10.0.0.10`.',
+    requirements: [
+      {
+        type: 'dns-lookup',
+        description: 'Resolve greenhouse.solar-grove.local to 10.0.0.10',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 100,
+  },
+  {
+    id: 'obj-18-upstream-repair',
+    index: 18,
+    title: 'Goal 18 — Triage and Repair Bad Upstream',
+    solarpunkTitle: '🔄 Upstream Route Convergence',
+    description:
+      'Diagnose the 502 Bad Gateway error on greenhouse.solar-grove.local using `journalctl -u helio-relay` or `nginx -t`. Reconfigure the upstream host to `greenhouse-controller:4000` via Network Console.',
+    requirements: [
+      {
+        type: 'route-repair',
+        description: 'Correct upstream route to greenhouse-controller:4000',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 150,
+  },
+  {
+    id: 'obj-19-tls-certificate',
+    index: 19,
+    title: 'Goal 19 — Secure Gateway with TLS',
+    solarpunkTitle: '🔒 Cryptographic Handshake',
+    description:
+      'Request and install an automated ACME TLS certificate for *.solar-grove.local in Certificate Manager or Terminal, resolving browser privacy warnings and enabling HTTPS.',
+    requirements: [
+      {
+        type: 'cert-install',
+        description: 'Issue and install valid TLS certificate for solar-grove.local',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 200,
+  },
+  {
+    id: 'obj-20-expose-irrigation',
+    index: 20,
+    title: 'Goal 20 — Expose Unified Farm Ingress',
+    solarpunkTitle: '🌿 Solarpunk Production Ingress',
+    description:
+      'Add a proxy route for `irrigation.solar-grove.local` forwarding to `10.0.0.30:8080` and verify HTTPS access across the entire farm.',
+    requirements: [
+      {
+        type: 'public-irrigation',
+        description: 'Expose irrigation.solar-grove.local through edge proxy',
+        target: 1,
+        current: 0,
+        satisfied: false,
+      },
+    ],
+    completed: false,
+    rewardGold: 250,
   },
 ];
+

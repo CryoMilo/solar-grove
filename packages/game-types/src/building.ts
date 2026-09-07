@@ -5,6 +5,7 @@ export type BuildingType =
   | 'helio-pump'
   | 'helio-irrigation-station'
   | 'verdant-glasshouse'
+  | 'helio-relay'
   | 'sunvault-storage'
   | 'harvest-automaton';
 

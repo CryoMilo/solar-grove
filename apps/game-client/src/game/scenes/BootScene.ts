@@ -419,6 +419,79 @@ export class BootScene extends Phaser.Scene {
 
       this.textures.addCanvas('iso_building_verdant_glasshouse', cGh);
     }
+
+    // 3. Helio Relay Station (64x80 canvas) - Solarpunk Communications Tower
+    const cRelay = document.createElement('canvas');
+    cRelay.width = 64;
+    cRelay.height = 80;
+    const ctxRelay = cRelay.getContext('2d');
+    if (ctxRelay) {
+      // Ground shadow
+      ctxRelay.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      ctxRelay.beginPath();
+      ctxRelay.ellipse(32, 68, 24, 10, 0, 0, Math.PI * 2);
+      ctxRelay.fill();
+
+      // Stone & Brass Base Platform
+      ctxRelay.fillStyle = '#2d3748';
+      ctxRelay.fillRect(18, 58, 28, 12);
+      ctxRelay.fillStyle = '#d69e2e';
+      ctxRelay.fillRect(16, 56, 32, 4);
+
+      // Lattice Tower (Brass & Teal Solarpunk Framework)
+      ctxRelay.strokeStyle = '#d69e2e';
+      ctxRelay.lineWidth = 2;
+      ctxRelay.beginPath();
+      ctxRelay.moveTo(22, 56);
+      ctxRelay.lineTo(28, 22);
+      ctxRelay.moveTo(42, 56);
+      ctxRelay.lineTo(36, 22);
+      // Cross struts
+      ctxRelay.moveTo(22, 50);
+      ctxRelay.lineTo(40, 36);
+      ctxRelay.moveTo(42, 50);
+      ctxRelay.lineTo(24, 36);
+      ctxRelay.moveTo(25, 36);
+      ctxRelay.lineTo(37, 24);
+      ctxRelay.moveTo(39, 36);
+      ctxRelay.lineTo(27, 24);
+      ctxRelay.stroke();
+
+      // Central Energy Conduit (Cyan Solarpunk Core)
+      ctxRelay.fillStyle = '#319795';
+      ctxRelay.fillRect(30, 24, 4, 32);
+
+      // Upper Equipment Platform
+      ctxRelay.fillStyle = '#b7791f';
+      ctxRelay.fillRect(24, 20, 16, 4);
+
+      // Parabolic Communications Dish (Facing Skyward)
+      ctxRelay.fillStyle = 'rgba(99, 179, 237, 0.7)';
+      ctxRelay.beginPath();
+      ctxRelay.ellipse(32, 14, 14, 8, 0.2, 0, Math.PI * 2);
+      ctxRelay.fill();
+      ctxRelay.strokeStyle = '#63b3ed';
+      ctxRelay.lineWidth = 1.5;
+      ctxRelay.stroke();
+
+      // Receiver Feed Horn & Top Mast
+      ctxRelay.strokeStyle = '#ecc94b';
+      ctxRelay.lineWidth = 1.5;
+      ctxRelay.beginPath();
+      ctxRelay.moveTo(32, 14);
+      ctxRelay.lineTo(32, 6);
+      ctxRelay.stroke();
+
+      // Glowing Solarpunk Beacon (Pulsing Cyan Core)
+      ctxRelay.fillStyle = '#4fd1c5';
+      ctxRelay.beginPath();
+      ctxRelay.arc(32, 6, 3.5, 0, Math.PI * 2);
+      ctxRelay.fill();
+      ctxRelay.fillStyle = '#ffffff';
+      ctxRelay.fillRect(31, 5, 2, 2);
+
+      this.textures.addCanvas('iso_building_helio_relay', cRelay);
+    }
   }
 
   private createIsometricCursors() {

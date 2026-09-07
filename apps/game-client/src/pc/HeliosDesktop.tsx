@@ -20,9 +20,11 @@ import type { HeliosWindowId } from '../stores/useGameStore';
 import { useGameStore } from '../stores/useGameStore';
 import { BlueprintModal } from './BlueprintModal/BlueprintModal';
 import { BrowserWindow } from './Browser/BrowserWindow';
+import { CertificateManagerWindow } from './CertificateManager/CertificateManagerWindow';
 import { CloudConsoleWindow } from './CloudConsole/CloudConsoleWindow';
 import { KnowledgeMapWindow } from './KnowledgeMap/KnowledgeMapWindow';
 import { MicroLessonDrawer } from './MicroLesson/MicroLessonDrawer';
+import { NetworkConsoleWindow } from './NetworkConsole/NetworkConsoleWindow';
 import { ObjectivesWindow } from './Objectives/ObjectivesWindow';
 import { ObservatoryWindow } from './Observatory/ObservatoryWindow';
 import { SoftwareCatalogWindow } from './SoftwareCatalog/SoftwareCatalogWindow';
@@ -43,7 +45,9 @@ export const HeliosDesktop: React.FC = () => {
   const navItems: { id: HeliosWindowId; label: string; icon: React.ReactNode }[] = [
     { id: 'observatory', label: 'Observatory', icon: <Activity size={16} /> },
     { id: 'software', label: 'Software Catalog', icon: <Layers size={16} /> },
-    { id: 'browser', label: 'Browser', icon: <Globe size={16} /> },
+    { id: 'network', label: 'Network', icon: <Globe size={16} /> },
+    { id: 'certs', label: 'Certificates', icon: <Zap size={16} /> },
+    { id: 'browser', label: 'Browser', icon: <Droplets size={16} /> },
     { id: 'terminal', label: 'Terminal', icon: <Terminal size={16} /> },
     { id: 'cloud', label: 'Cloud Manager', icon: <Cloud size={16} /> },
     { id: 'objectives', label: 'Objectives', icon: <Sparkles size={16} /> },
@@ -251,6 +255,8 @@ export const HeliosDesktop: React.FC = () => {
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         {activeWindow === 'observatory' && <ObservatoryWindow />}
         {activeWindow === 'software' && <SoftwareCatalogWindow />}
+        {activeWindow === 'network' && <NetworkConsoleWindow />}
+        {activeWindow === 'certs' && <CertificateManagerWindow />}
         {activeWindow === 'browser' && <BrowserWindow />}
         {activeWindow === 'terminal' && <TerminalWindow />}
         {activeWindow === 'cloud' && <CloudConsoleWindow />}

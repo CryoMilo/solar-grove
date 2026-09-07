@@ -5,6 +5,7 @@ import {
   BookOpen,
   CheckCircle2,
   Droplets,
+  ExternalLink,
   Gauge,
   Globe,
   Lock,
@@ -12,11 +13,13 @@ import {
   Play,
   RefreshCw,
   Search,
+  ShieldAlert,
+  ShieldCheck,
   Terminal,
   Zap,
 } from 'lucide-react';
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 
 export const BrowserWindow: React.FC = () => {
@@ -29,6 +32,7 @@ export const BrowserWindow: React.FC = () => {
   const dispatchHttp = useGameStore((s) => s.dispatchHttp);
   const setActiveWindow = useGameStore((s) => s.setActiveWindow);
   const farmState = useGameStore((s) => s.farmState);
+  const checkMilestones = useGameStore((s) => s.checkMilestones);
 
   const handleNavigate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,6 +47,7 @@ export const BrowserWindow: React.FC = () => {
   const handleRefresh = () => {
     setIsRefreshing(true);
     setTimeout(() => setIsRefreshing(false), 300);
+    checkMilestones();
   };
 
   const loadBookmark = (url: string) => {
@@ -50,17 +55,47 @@ export const BrowserWindow: React.FC = () => {
     setBrowserUrl(url);
   };
 
-  // Inspect simulated target via HTTP dispatcher (PRD §16)
+  // Inspect simulated target via HTTP dispatcher
   const httpResponse = dispatchHttp(browserUrl);
   const isErrConnectionRefused =
     httpResponse.error?.includes('ERR_CONNECTION_REFUSED') || httpResponse.statusCode === 0;
 
+  const is301Redirect = httpResponse.statusCode === 301;
+  const isSslError =
+    httpResponse.statusCode === 495 ||
+    Boolean(httpResponse.error?.includes('ERR_CERT')) ||
+    Boolean(httpResponse.body?.includes('NET::ERR_CERT'));
+  const isNginx502 =
+    httpResponse.statusCode === 502 &&
+    (Boolean(httpResponse.headers?.['Server']?.includes('nginx')) ||
+      Boolean(httpResponse.body?.includes('greenhouse-app')) ||
+      Boolean(httpResponse.error?.includes('greenhouse-app')));
+
   const isIrrigationUrl =
+    browserUrl.includes('irrigation.solar-grove.local') ||
     browserUrl.includes('irrigation.local') ||
     browserUrl.includes(':8080') ||
     browserUrl.includes(':3000');
-  const isGreenhouseUrl = browserUrl.includes('greenhouse.local') || browserUrl.includes(':4000');
+  const isGreenhouseUrl =
+    browserUrl.includes('greenhouse.solar-grove.local') ||
+    browserUrl.includes('greenhouse.local') ||
+    browserUrl.includes(':4000');
   const isDocsUrl = browserUrl.includes('docs.local');
+
+  // Follow 301 Redirect after brief educational animation
+  useEffect(() => {
+    if (httpResponse.statusCode === 301 && httpResponse.headers?.['Location']) {
+      const target = httpResponse.headers['Location'];
+      const timer = setTimeout(() => {
+        setBrowserUrl(target);
+        setInputUrl(target);
+      }, 1200);
+      return () => {
+        clearTimeout(timer);
+      };
+    }
+    return undefined;
+  }, [browserUrl, httpResponse.statusCode, httpResponse.headers, setBrowserUrl]);
 
   const telemetry = serviceManager.getIrrigationTelemetry();
   const isPumping = serviceManager.isIrrigationActivelyPumping();
@@ -135,13 +170,23 @@ export const BrowserWindow: React.FC = () => {
               display: 'flex',
               alignItems: 'center',
               backgroundColor: '#0a1813',
-              border: '1px solid rgba(72,187,120,0.35)',
+              border: isSslError
+                ? '1px solid #e53e3e'
+                : browserUrl.startsWith('https://')
+                ? '1px solid rgba(72,187,120,0.6)'
+                : '1px solid rgba(72,187,120,0.35)',
               borderRadius: '6px',
               padding: '4px 12px',
               gap: '8px',
             }}
           >
-            <Lock size={12} color="#68d391" />
+            {isSslError ? (
+              <ShieldAlert size={14} color="#fc8181" />
+            ) : browserUrl.startsWith('https://') ? (
+              <Lock size={14} color="#68d391" />
+            ) : (
+              <Globe size={14} color="#a0aec0" />
+            )}
             <input
               type="text"
               value={inputUrl}
@@ -149,13 +194,28 @@ export const BrowserWindow: React.FC = () => {
               style={{
                 background: 'transparent',
                 border: 'none',
-                color: '#fff',
+                color: isSslError ? '#feb2b2' : '#fff',
                 fontFamily: 'var(--font-mono)',
                 fontSize: '13px',
                 outline: 'none',
                 width: '100%',
               }}
             />
+            {browserUrl.startsWith('https://') && !isSslError && (
+              <span
+                style={{
+                  fontSize: '10px',
+                  backgroundColor: 'rgba(72,187,120,0.2)',
+                  color: '#68d391',
+                  padding: '1px 6px',
+                  borderRadius: '4px',
+                  fontWeight: 700,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                TLS 1.3
+              </span>
+            )}
             <button
               type="submit"
               className="btn-solarpunk"
@@ -167,15 +227,31 @@ export const BrowserWindow: React.FC = () => {
         </div>
 
         {/* Bookmarks Bar */}
-        <div style={{ display: 'flex', gap: '8px', fontSize: '11px' }}>
+        <div style={{ display: 'flex', gap: '8px', fontSize: '11px', flexWrap: 'wrap' }}>
           <span style={{ color: '#718096', padding: '2px 4px' }}>BOOKMARKS:</span>
           <button
             type="button"
-            className="btn-solarpunk"
-            onClick={() => loadBookmark('http://irrigation.local:8080')}
-            style={{ padding: '2px 8px', fontSize: '11px' }}
+            className="btn-solarpunk btn-gold"
+            onClick={() => loadBookmark('https://greenhouse.solar-grove.local')}
+            style={{ padding: '2px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
           >
-            💧 irrigation.local:8080
+            🔒 https://greenhouse.solar-grove.local
+          </button>
+          <button
+            type="button"
+            className="btn-solarpunk"
+            onClick={() => loadBookmark('http://greenhouse.solar-grove.local')}
+            style={{ padding: '2px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+          >
+            🔁 http://greenhouse (301 Redirect)
+          </button>
+          <button
+            type="button"
+            className="btn-solarpunk"
+            onClick={() => loadBookmark('https://irrigation.solar-grove.local')}
+            style={{ padding: '2px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+          >
+            🔒 https://irrigation.solar-grove.local
           </button>
           <button
             type="button"
@@ -183,15 +259,15 @@ export const BrowserWindow: React.FC = () => {
             onClick={() => loadBookmark('http://greenhouse.local:4000')}
             style={{ padding: '2px 8px', fontSize: '11px' }}
           >
-            🌿 greenhouse.local:4000
+            🌿 direct :4000
           </button>
           <button
             type="button"
             className="btn-solarpunk"
-            onClick={() => loadBookmark('http://docs.local')}
+            onClick={() => loadBookmark('http://irrigation.local:8080')}
             style={{ padding: '2px 8px', fontSize: '11px' }}
           >
-            📖 docs.local
+            💧 direct :8080
           </button>
         </div>
       </div>
@@ -208,8 +284,215 @@ export const BrowserWindow: React.FC = () => {
           alignItems: 'flex-start',
         }}
       >
-        {/* SCENARIO 1: Irrigation Controller Web Page */}
-        {isIrrigationUrl &&
+        {/* PHASE 4: HTTP 301 MOVED PERMANENTLY */}
+        {is301Redirect ? (
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '620px',
+              backgroundColor: '#07100d',
+              padding: '36px',
+              borderRadius: '10px',
+              border: '1px solid rgba(214,158,46,0.45)',
+              boxShadow: '0 8px 30px rgba(0,0,0,0.75)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+              <RefreshCw size={36} color="#ecc94b" className="animate-spin" />
+              <div>
+                <h2 style={{ margin: 0, fontSize: '20px', color: '#ecc94b' }}>301 Moved Permanently</h2>
+                <span style={{ color: '#fbd38d', fontSize: '13px', fontFamily: 'var(--font-mono)' }}>
+                  Helio Relay Nginx Edge (Port 80 → Port 443)
+                </span>
+              </div>
+            </div>
+
+            <p style={{ color: '#cbd5e0', fontSize: '13px', lineHeight: 1.6 }}>
+              The edge gateway enforces secure HTTPS communication. Plaintext HTTP traffic is permanently redirected.
+            </p>
+
+            <div
+              style={{
+                backgroundColor: '#0a1813',
+                padding: '14px 18px',
+                borderRadius: '6px',
+                border: '1px solid rgba(214,158,46,0.25)',
+                margin: '20px 0',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '12px',
+                color: '#68d391',
+              }}
+            >
+              Location: {httpResponse.headers?.['Location'] || `https://${browserUrl.replace(/^https?:\/\//, '')}`}
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                type="button"
+                className="btn-solarpunk btn-gold"
+                onClick={() => {
+                  const target =
+                    httpResponse.headers?.['Location'] ||
+                    `https://${browserUrl.replace(/^https?:\/\//, '')}`;
+                  setBrowserUrl(target);
+                  setInputUrl(target);
+                }}
+                style={{ padding: '8px 16px', fontSize: '12px' }}
+              >
+                Proceed to Secure HTTPS
+              </button>
+            </div>
+          </div>
+        ) : isSslError ? (
+          /* PHASE 4: TLS CERTIFICATE ERROR (NET::ERR_CERT_COMMON_NAME_INVALID) */
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '620px',
+              backgroundColor: '#07100d',
+              padding: '36px',
+              borderRadius: '10px',
+              border: '1px solid rgba(229,62,62,0.5)',
+              boxShadow: '0 8px 30px rgba(0,0,0,0.75)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+              <ShieldAlert size={40} color="#fc8181" />
+              <div>
+                <h2 style={{ margin: 0, fontSize: '20px', color: '#fed7d7' }}>
+                  Your connection is not private
+                </h2>
+                <span style={{ color: '#feb2b2', fontSize: '13px', fontFamily: 'var(--font-mono)' }}>
+                  NET::ERR_CERT_COMMON_NAME_INVALID
+                </span>
+              </div>
+            </div>
+
+            <p style={{ color: '#cbd5e0', fontSize: '13px', lineHeight: 1.6 }}>
+              Attackers might be trying to steal your information from{' '}
+              <code style={{ color: '#ecc94b' }}>{browserUrl}</code> (for example, passwords, messages, or farm telemetry).
+            </p>
+
+            <div
+              style={{
+                backgroundColor: '#0a1813',
+                padding: '16px',
+                borderRadius: '6px',
+                border: '1px solid rgba(214,158,46,0.25)',
+                margin: '20px 0',
+              }}
+            >
+              <div style={{ color: '#ecc94b', fontWeight: 700, fontSize: '12px', marginBottom: '8px' }}>
+                EDGE TLS CERTIFICATE DIAGNOSTIC (Phase 4):
+              </div>
+              <div style={{ fontSize: '12px', color: '#cbd5e0', lineHeight: 1.7 }}>
+                The Helio Relay edge gateway (10.0.0.10) terminated this HTTPS connection on port 443, but no valid X.509 certificate was found for this domain. Open the Certificate Manager to issue an automated Let's Encrypt certificate.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                type="button"
+                className="btn-solarpunk btn-gold"
+                onClick={() => setActiveWindow('certs')}
+                style={{ padding: '8px 16px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Lock size={14} /> Open Certificate Manager
+              </button>
+              <button
+                type="button"
+                className="btn-solarpunk"
+                onClick={() => setActiveWindow('terminal')}
+                style={{ padding: '8px 16px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Terminal size={14} /> Test with openssl s_client
+              </button>
+            </div>
+
+            <div style={{ marginTop: '20px', fontSize: '11px', color: '#718096', fontFamily: 'var(--font-mono)' }}>
+              PORT: 443 • CIPHER: NONE • VERIFY: CERT_MISSING_OR_UNTRUSTED
+            </div>
+          </div>
+        ) : isNginx502 ? (
+          /* PHASE 4: 502 BAD GATEWAY (NGINX UPSTREAM FAILURE) */
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '620px',
+              backgroundColor: '#07100d',
+              padding: '36px',
+              borderRadius: '10px',
+              border: '1px solid rgba(229,62,62,0.45)',
+              boxShadow: '0 8px 30px rgba(0,0,0,0.75)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <AlertTriangle size={36} color="#fc8181" />
+              <div>
+                <h2 style={{ margin: 0, fontSize: '20px', color: '#fed7d7' }}>502 Bad Gateway</h2>
+                <span style={{ color: '#feb2b2', fontSize: '13px', fontFamily: 'var(--font-mono)' }}>
+                  nginx/1.24.0: Upstream Connection Refused
+                </span>
+              </div>
+            </div>
+
+            <p style={{ color: '#cbd5e0', fontSize: '13px', lineHeight: 1.6 }}>
+              The Helio Relay reverse proxy received connection refused when proxying this request to upstream server:{' '}
+              <code style={{ color: '#fc8181' }}>connect() failed (111: Connection refused)</code>.
+            </p>
+
+            <div
+              style={{
+                backgroundColor: '#0a1813',
+                padding: '16px',
+                borderRadius: '6px',
+                border: '1px solid rgba(214,158,46,0.25)',
+                margin: '20px 0',
+              }}
+            >
+              <div style={{ color: '#ecc94b', fontWeight: 700, fontSize: '12px', marginBottom: '8px' }}>
+                UPSTREAM ROUTE DIAGNOSTIC (Phase 4):
+              </div>
+              <div style={{ fontSize: '12px', color: '#cbd5e0', lineHeight: 1.7 }}>
+                The proxy route is configured to forward to <code style={{ color: '#fc8181' }}>greenhouse-app:4000</code>. However, the Docker container is named <code style={{ color: '#68d391' }}>greenhouse-controller:4000</code>. Reconfigure the upstream host in the Network Console.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                type="button"
+                className="btn-solarpunk btn-gold"
+                onClick={() => setActiveWindow('network')}
+                style={{ padding: '8px 16px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Globe size={14} /> Open Network Console
+              </button>
+              <button
+                type="button"
+                className="btn-solarpunk"
+                onClick={() => setActiveWindow('terminal')}
+                style={{ padding: '8px 16px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Terminal size={14} /> journalctl -u helio-relay
+              </button>
+              <button
+                type="button"
+                className="btn-solarpunk"
+                onClick={handleRefresh}
+                style={{ padding: '8px 16px', fontSize: '12px' }}
+              >
+                <RefreshCw size={14} /> Try Again
+              </button>
+            </div>
+
+            <div style={{ marginTop: '20px', fontSize: '11px', color: '#718096', fontFamily: 'var(--font-mono)' }}>
+              SERVER: nginx/1.24.0 • ERROR: connect() failed (111: Connection refused) to upstream greenhouse-app:4000
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* SCENARIO 1: Irrigation Controller Web Page */}
+            {isIrrigationUrl &&
           (isIrrRunning ? (
             <div
               className="glass-panel frame-solarpunk"
@@ -1069,7 +1352,10 @@ export const BrowserWindow: React.FC = () => {
             </p>
           </div>
         )}
+          </>
+        )}
       </div>
     </div>
   );
 };
+

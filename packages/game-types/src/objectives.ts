@@ -26,7 +26,13 @@ export interface ObjectiveRequirement {
     | 'docker-compose'
     | 'docker-diagnose'
     | 'greenhouse-healthy'
-    | 'greenhouse-browser';
+    | 'greenhouse-browser'
+    | 'relay-deploy'
+    | 'dns-lookup'
+    | 'route-repair'
+    | 'cert-install'
+    | 'https-access'
+    | 'public-irrigation';
   description: string;
   target: number;
   current: number;

@@ -119,15 +119,16 @@ export const MICRO_LESSONS: Record<CompetencyId, MicroLesson> = {
   },
   'networking.dns': {
     id: 'networking.dns',
-    title: '🌐 DNS Resolution (Domain Names)',
+    title: '🌐 DNS Hostname Resolution & A-Records',
     category: 'networking',
-    readTimeSeconds: 45,
-    summary: 'DNS translates human-friendly domain names into machine IP addresses.',
+    readTimeSeconds: 50,
+    summary: 'DNS maps human-readable domain names to numerical IP addresses.',
     explanation:
-      'Instead of typing `13.250.41.82:8080`, DNS allows your farm to address services as `api.solargrove.internal`.',
-    suggestedCommand: 'cat /etc/hosts',
-    commandExplanation: 'Inspects local DNS resolution mappings.',
-    whyFarmNeedsIt: 'Ensures greenhouse sensors route data to the correct backend host.',
+      'Instead of remembering numerical IP addresses like 10.0.0.10, DNS A-records map `greenhouse.solar-grove.local` to the Helio Relay Gateway IP address. Tools like `nslookup` and `dig` query the DNS nameserver (10.0.0.1).',
+    suggestedCommand: 'nslookup greenhouse.solar-grove.local',
+    commandExplanation: 'Queries the simulated nameserver for the A-record of the domain.',
+    whyFarmNeedsIt:
+      'Allows operators and automated farm sensors to reach services via stable hostnames instead of ephemeral IPs.',
   },
   'containers.volumes': {
     id: 'containers.volumes',
@@ -301,5 +302,70 @@ export const MICRO_LESSONS: Record<CompetencyId, MicroLesson> = {
       'Inspects container configuration, including injected environment variables.',
     whyFarmNeedsIt:
       'The greenhouse controller needs the correct database password in DATABASE_URL to record crop telemetry.',
+  },
+  'networking.reverse-proxy': {
+    id: 'networking.reverse-proxy',
+    title: '🔀 Nginx Reverse Proxy & Edge Gateways',
+    category: 'networking',
+    readTimeSeconds: 60,
+    summary: 'A reverse proxy sits in front of backend servers, routing client requests based on hostname and path.',
+    explanation:
+      'Nginx listens on public ports 80 and 443. When a request arrives, Nginx examines the `Host` HTTP header and dispatches the request to the designated upstream application running in private subnets or Docker containers.',
+    suggestedCommand: 'systemctl status helio-relay',
+    commandExplanation: 'Checks if the Nginx reverse proxy daemon is active and listening.',
+    whyFarmNeedsIt:
+      'Helio Relay consolidates single-port public access across the irrigation and greenhouse systems without exposing raw container ports to the open network.',
+  },
+  'networking.upstream': {
+    id: 'networking.upstream',
+    title: '⚡ Upstream Services & 502 Bad Gateway',
+    category: 'networking',
+    readTimeSeconds: 55,
+    summary: 'An upstream is the target backend server where the reverse proxy forwards traffic.',
+    explanation:
+      'If the proxy configuration specifies a typo in the upstream hostname or port (e.g. `greenhouse-app:4000` instead of `greenhouse-controller:4000`), Nginx cannot establish a TCP connection and returns `502 Bad Gateway`.',
+    suggestedCommand: 'journalctl -u helio-relay',
+    commandExplanation: 'Inspects Nginx error logs to find connection refused messages to upstream targets.',
+    whyFarmNeedsIt:
+      'Understanding the difference between a broken gateway route and an application crash is vital for triage.',
+  },
+  'networking.tls': {
+    id: 'networking.tls',
+    title: '🔒 TLS Encryption & HTTPS Port 443',
+    category: 'networking',
+    readTimeSeconds: 60,
+    summary: 'Transport Layer Security encrypts web traffic and verifies server cryptographic identity.',
+    explanation:
+      'HTTPS uses TLS to encrypt requests and responses over port 443. Without a valid TLS certificate, web browsers block navigation with `Your connection is not private`.',
+    suggestedCommand: 'openssl s_client -connect greenhouse.solar-grove.local:443 -servername greenhouse.solar-grove.local',
+    commandExplanation: 'Initiates a diagnostic TLS handshake to inspect certificates and validation status.',
+    whyFarmNeedsIt:
+      'Secures agricultural telemetry and sensor control commands from tampering across the farm network.',
+  },
+  'networking.certificates': {
+    id: 'networking.certificates',
+    title: '📜 TLS Certificates & Automated ACME',
+    category: 'networking',
+    readTimeSeconds: 55,
+    summary: 'Digital certificates bind cryptographic public keys to verified domain names.',
+    explanation:
+      'Automated Certificate Management Environment (ACME) protocols—used by Let’s Encrypt—automatically prove domain control, sign certificates, and install them into Nginx without manual key generation.',
+    suggestedCommand: 'curl -I https://greenhouse.solar-grove.local',
+    commandExplanation: 'Tests an encrypted HTTPS connection through the edge gateway.',
+    whyFarmNeedsIt:
+      'Allows issuing valid 90-day certificates to eliminate browser privacy warnings and enable production HTTPS.',
+  },
+  'networking.http-redirect': {
+    id: 'networking.http-redirect',
+    title: '↪️ HTTP to HTTPS 301 Redirects',
+    category: 'networking',
+    readTimeSeconds: 45,
+    summary: '301 Moved Permanently redirects plain HTTP traffic on port 80 to secure HTTPS on port 443.',
+    explanation:
+      'When users type `http://...` or omit the protocol, Nginx responds with `301 Moved Permanently` and a `Location: https://...` header, instructing clients to upgrade their connection automatically.',
+    suggestedCommand: 'curl -I http://greenhouse.solar-grove.local',
+    commandExplanation: 'Inspects HTTP response headers to verify the 301 redirect response.',
+    whyFarmNeedsIt:
+      'Guarantees all farm operators are transparently routed to encrypted channels.',
   },
 };

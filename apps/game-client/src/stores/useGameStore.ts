@@ -34,7 +34,9 @@ export type HeliosWindowId =
   | 'knowledge'
   | 'objectives'
   | 'browser'
-  | 'software';
+  | 'software'
+  | 'network'
+  | 'certs';
 
 export interface PlacementState {
   active: boolean;
@@ -91,6 +93,7 @@ interface GameStore {
   learnCompetency: (id: CompetencyId) => void;
   triggerIncident: (type?: IncidentType) => void;
   resolveIncident: (id: string) => void;
+  checkMilestones: () => void;
 }
 
 const initialServiceManager = new ServiceManager();
@@ -107,6 +110,11 @@ const initialKnowledge: PlayerKnowledgeMap = {
   'networking.ports': { status: 'UNKNOWN', timesUsed: 0 },
   'networking.http': { status: 'UNKNOWN', timesUsed: 0 },
   'networking.dns': { status: 'UNKNOWN', timesUsed: 0 },
+  'networking.reverse-proxy': { status: 'UNKNOWN', timesUsed: 0 },
+  'networking.upstream': { status: 'UNKNOWN', timesUsed: 0 },
+  'networking.tls': { status: 'UNKNOWN', timesUsed: 0 },
+  'networking.certificates': { status: 'UNKNOWN', timesUsed: 0 },
+  'networking.http-redirect': { status: 'UNKNOWN', timesUsed: 0 },
   'containers.docker': { status: 'UNKNOWN', timesUsed: 0 },
   'containers.images': { status: 'UNKNOWN', timesUsed: 0 },
   'containers.volumes': { status: 'UNKNOWN', timesUsed: 0 },
@@ -425,10 +433,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
       get().discoverConcept('containers.docker');
       get().discoverConcept('containers.images');
       get().discoverConcept('databases.postgresql');
+    } else if (type === 'helio-relay') {
+      get().discoverConcept('networking.reverse-proxy');
+      get().discoverConcept('networking.upstream');
+      get().discoverConcept('networking.tls');
     } else {
       get().discoverConcept('linux.services');
       get().discoverConcept('networking.ports');
     }
+
+    get().checkMilestones();
 
     return {
       success: true,
@@ -444,7 +458,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const updatedBuildings = buildings.map((b) => {
         if (
           b.softwareId === softwareId ||
-          (softwareId === 'irrigation-controller' && b.type === 'helio-pump')
+          (softwareId === 'irrigation-controller' && b.type === 'helio-pump') ||
+          (softwareId === 'helio-relay' && b.type === 'helio-relay')
         ) {
           return { ...b, softwareStatus: 'DEPLOYED' as const };
         }
@@ -453,8 +468,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       get().practiceConcept('linux.services');
       get().discoverConcept('networking.ports');
+      if (softwareId === 'helio-relay') {
+        get().practiceConcept('networking.reverse-proxy');
+        get().discoverConcept('networking.upstream');
+        get().discoverConcept('networking.tls');
+      }
 
       set({ buildings: updatedBuildings });
+      get().checkMilestones();
     }
 
     return res;
@@ -464,11 +485,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { serviceManager, practiceConcept, objectives } = get();
     const res = serviceManager.dispatchHttp(url, options);
 
+    if (res.statusCode === 301) {
+      practiceConcept('networking.http-redirect');
+    }
+
+    if (url.includes('solar-grove.local')) {
+      practiceConcept('networking.reverse-proxy');
+      if (url.startsWith('https://')) {
+        practiceConcept('networking.tls');
+      }
+    }
+
     if (res.statusCode === 200) {
       practiceConcept('networking.http');
 
-      // If user navigated to greenhouse.local:4000 successfully
-      if (url.includes('greenhouse.local') || url.includes(':4000')) {
+      // If user navigated to greenhouse.local:4000 or greenhouse.solar-grove.local successfully
+      if (url.includes('greenhouse.local') || url.includes(':4000') || url.includes('greenhouse.solar-grove.local')) {
         practiceConcept('databases.postgresql');
         practiceConcept('databases.connection');
         practiceConcept('containers.health');
@@ -513,6 +545,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         set({ objectives: updatedObjectives });
       }
     }
+
+    get().checkMilestones();
 
     return res;
   },
@@ -846,6 +880,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const svc = serviceManager.getService('irrigation-controller');
           b.status = svc?.status === 'running' ? 'healthy' : 'failed';
           b.softwareStatus = svc?.status === 'running' ? 'HEALTHY' : 'CRASHED';
+        } else if (b.type === 'helio-relay' && result.affectedService === 'helio-relay') {
+          const svc = serviceManager.getService('helio-relay');
+          b.status = svc?.status === 'running' ? 'healthy' : 'failed';
+          b.softwareStatus = svc?.status === 'running' ? 'HEALTHY' : 'CRASHED';
         }
         return b;
       });
@@ -876,7 +914,122 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set({ buildings: updatedBuildings, objectives: updatedObjectives });
     }
 
+    // Phase 4: Check DNS lookup objective (#17)
+    if (lower.includes('nslookup') || lower.includes('dig')) {
+      if (lower.includes('solar-grove.local') || lower.includes('greenhouse') || lower.includes('irrigation')) {
+        get().practiceConcept('networking.dns');
+        const updatedObjectives = objectives.map((obj) => {
+          const reqs = obj.requirements.map((req) => {
+            if (req.type === 'dns-lookup') {
+              req.current = 1;
+              req.satisfied = true;
+            }
+            return req;
+          });
+          return {
+            ...obj,
+            requirements: reqs,
+            completed: reqs.every((r) => r.satisfied),
+          };
+        });
+        set({ objectives: updatedObjectives });
+      }
+    }
+
+    if (lower.includes('certbot') || lower.includes('openssl')) {
+      get().practiceConcept('networking.tls');
+      get().practiceConcept('networking.certificates');
+    }
+
+    if (lower.includes('nginx')) {
+      get().practiceConcept('networking.reverse-proxy');
+      get().practiceConcept('networking.upstream');
+    }
+
+    get().checkMilestones();
+
     return result.stdout + extraOutput;
+  },
+
+  checkMilestones: () => {
+    const { serviceManager, buildings, objectives, farmState } = get();
+    let anyChanged = false;
+    let goldReward = 0;
+
+    const proxyState = serviceManager.getReverseProxyState();
+    const relayService = serviceManager.getService('helio-relay');
+    const hasRelayBuilding = buildings.some((b) => b.type === 'helio-relay');
+
+    const updatedObjectives = objectives.map((obj) => {
+      let objChanged = false;
+      const reqs = obj.requirements.map((req) => {
+        if (req.satisfied) return req;
+
+        let satisfied = false;
+        if (req.type === 'build' && req.targetBuildingType === 'helio-relay') {
+          satisfied = hasRelayBuilding;
+        } else if (req.type === 'relay-deploy') {
+          satisfied = relayService?.status === 'running';
+        } else if (req.type === 'route-repair') {
+          const ghRoute = proxyState.routes.find(
+            (r) => r.id === 'route-greenhouse' || r.hostname.includes('greenhouse')
+          );
+          satisfied =
+            ghRoute?.upstreamHost === 'greenhouse-controller' && ghRoute?.upstreamPort === 4000;
+        } else if (req.type === 'cert-install') {
+          const certs = serviceManager.getCertificates();
+          satisfied = certs.some(
+            (c) =>
+              (c.domain === '*.solar-grove.local' || c.domain.includes('solar-grove.local')) &&
+              c.status === 'VALID'
+          );
+        } else if (req.type === 'public-irrigation') {
+          satisfied = proxyState.routes.some(
+            (r) =>
+              r.hostname === 'irrigation.solar-grove.local' &&
+              r.upstreamPort === 8080 &&
+              r.tlsRequired
+          );
+        }
+
+        if (satisfied) {
+          req.current = req.target;
+          req.satisfied = true;
+          objChanged = true;
+        }
+        return req;
+      });
+
+      const isComplete = reqs.every((r) => r.satisfied);
+      if (isComplete && !obj.completed) {
+        objChanged = true;
+        goldReward += obj.rewardGold;
+        return {
+          ...obj,
+          requirements: reqs,
+          completed: true,
+        };
+      }
+
+      if (objChanged) {
+        anyChanged = true;
+        return {
+          ...obj,
+          requirements: reqs,
+        };
+      }
+      return obj;
+    });
+
+    if (anyChanged || goldReward > 0) {
+      set({
+        farmState: {
+          ...farmState,
+          gold: farmState.gold + goldReward,
+        },
+        objectives: updatedObjectives,
+      });
+    }
   },
 
   tick: () => {
@@ -891,6 +1044,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const isGreenhouseOptimized =
       serviceManager.isGreenhouseOptimized() &&
       buildings.some((b) => b.type === 'verdant-glasshouse' && b.status === 'healthy');
+
+    // 3. Check if Helio Relay Station is running
+    const isRelayRunning = buildings.some(
+      (b) => b.type === 'helio-relay' && b.status === 'healthy'
+    );
 
     // Sync buildings status with service manager
     for (const b of buildings) {
@@ -924,10 +1082,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
           b.status = 'offline';
           b.softwareStatus = 'NOT_DEPLOYED';
         }
+      } else if (b.type === 'helio-relay') {
+        const s = serviceManager.getService('helio-relay');
+        if (s?.status === 'running') {
+          b.status = 'healthy';
+          b.softwareStatus = 'HEALTHY';
+        } else if (s?.status === 'failed') {
+          b.status = 'failed';
+          b.softwareStatus = 'CRASHED';
+        } else {
+          b.status = 'offline';
+          b.softwareStatus = s?.deploymentStatus || 'NOT_DEPLOYED';
+        }
       }
     }
 
-    // 3. Water & Power consumption / generation
+    // 4. Water & Power consumption / generation
     let waterChange = 0;
     let powerChange = 0;
 
@@ -942,10 +1112,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       powerChange -= 1; // Climate aerators consume power
     }
 
+    if (isRelayRunning) {
+      powerChange -= 3; // Solarpunk communications array consumes 3 kWh / sec
+    }
+
     const newWater = Math.max(0, Math.min(farmState.maxWater, farmState.water + waterChange));
     const newPower = Math.max(0, Math.min(farmState.maxPower, farmState.power + powerChange));
 
-    // 4. Crop Growth & Hydration
+    // 5. Crop Growth & Hydration
     const updatedCrops = farmState.crops.map((crop) => {
       if (crop.stage === 'mature') return crop;
 
@@ -986,5 +1160,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         crops: updatedCrops,
       },
     });
+
+    get().checkMilestones();
   },
 }));

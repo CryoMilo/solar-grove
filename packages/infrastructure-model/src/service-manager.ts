@@ -1,15 +1,21 @@
 import type {
+  CertificateStatus,
   ContainerHealth,
   ContainerStatus,
+  DnsRecord,
   DockerImage,
   DockerNetwork,
   HostPort,
   HostProcess,
+  NetworkHost,
   PostgresState,
   PostgresTelemetryRecord,
+  ProxyRoute,
+  ReverseProxyState,
   SimulatedContainer,
   SimulatedHttpResponse,
   SoftwareDeploymentStatus,
+  TlsCertificate,
 } from '@solar-grove/game-types';
 
 export interface ServiceDefinition {
@@ -41,6 +47,10 @@ export class ServiceManager {
   private remoteRegistry: Map<string, DockerImage> = new Map();
   private localImages: Map<string, DockerImage> = new Map();
   private networks: Map<string, DockerNetwork> = new Map();
+  private hosts: Map<string, NetworkHost> = new Map();
+  private dnsRecords: Map<string, DnsRecord> = new Map();
+  private proxyRoutes: Map<string, ProxyRoute> = new Map();
+  private tlsCertificates: Map<string, TlsCertificate> = new Map();
   private nextPid = 1421;
 
   private irrigationTelemetry: IrrigationTelemetry = {
@@ -114,6 +124,10 @@ export class ServiceManager {
     this.initDefaultServices();
     this.initDockerRegistry();
     this.initDockerNetworks();
+    this.initNetworkTopology();
+    this.initDnsRecords();
+    this.initProxyRoutes();
+    this.initTlsCertificates();
   }
 
   private initDefaultServices() {
@@ -133,6 +147,126 @@ export class ServiceManager {
         'Loaded: loaded (/etc/systemd/system/irrigation-controller.service; enabled; vendor preset: enabled)',
         'Active: inactive (dead)',
       ],
+    });
+
+    // Helio Relay Edge Gateway (Phase 4 Nginx Reverse Proxy & TLS Terminator)
+    this.services.set('helio-relay', {
+      name: 'helio-relay',
+      description: 'Helio Relay Edge Gateway (Nginx Reverse Proxy & TLS Terminator)',
+      command: 'nginx -g "daemon off;"',
+      port: 443,
+      runtime: 'nginx',
+      status: 'stopped',
+      deploymentStatus: 'NOT_DEPLOYED',
+      cpu: 0,
+      memoryMb: 0,
+      logs: [
+        'helio-relay.service - Helio Relay Edge Gateway (Nginx)',
+        'Loaded: loaded (/etc/systemd/system/helio-relay.service; enabled; vendor preset: enabled)',
+        'Active: inactive (dead)',
+      ],
+    });
+  }
+
+  private initNetworkTopology() {
+    this.hosts.set('10.0.0.1', {
+      ip: '10.0.0.1',
+      hostname: 'farm-dns.solar-grove.local',
+      role: 'gateway',
+      description: 'Farm Gateway & Primary DNS Nameserver (10.0.0.1/24)',
+      ports: [53],
+      status: 'ONLINE',
+    });
+    this.hosts.set('10.0.0.2', {
+      ip: '10.0.0.2',
+      hostname: 'pixel-pc.solar-grove.local',
+      role: 'workstation',
+      description: 'Solar Grove Operator Terminal (Pixel PC - 10.0.0.2/24)',
+      ports: [],
+      status: 'ONLINE',
+    });
+    this.hosts.set('10.0.0.10', {
+      ip: '10.0.0.10',
+      hostname: 'relay.solar-grove.local',
+      role: 'proxy',
+      description: 'Helio Relay Station (Nginx Reverse Proxy & Ingress - 10.0.0.10/24)',
+      ports: [80, 443],
+      status: 'ONLINE',
+    });
+    this.hosts.set('10.0.0.20', {
+      ip: '10.0.0.20',
+      hostname: 'greenhouse.local',
+      role: 'container-host',
+      description: 'Verdant Glasshouse Docker Container Host (10.0.0.20/24)',
+      ports: [4000, 5432],
+      status: 'ONLINE',
+    });
+    this.hosts.set('10.0.0.30', {
+      ip: '10.0.0.30',
+      hostname: 'irrigation.local',
+      role: 'device',
+      description: 'Helio Irrigation Station Systemd Host (10.0.0.30/24)',
+      ports: [8080],
+      status: 'ONLINE',
+    });
+  }
+
+  private initDnsRecords() {
+    this.dnsRecords.set('greenhouse.solar-grove.local', {
+      hostname: 'greenhouse.solar-grove.local',
+      type: 'A',
+      value: '10.0.0.10',
+      ttl: 300,
+    });
+    this.dnsRecords.set('irrigation.solar-grove.local', {
+      hostname: 'irrigation.solar-grove.local',
+      type: 'A',
+      value: '10.0.0.10',
+      ttl: 300,
+    });
+    this.dnsRecords.set('relay.solar-grove.local', {
+      hostname: 'relay.solar-grove.local',
+      type: 'A',
+      value: '10.0.0.10',
+      ttl: 300,
+    });
+    this.dnsRecords.set('greenhouse.local', {
+      hostname: 'greenhouse.local',
+      type: 'A',
+      value: '10.0.0.20',
+      ttl: 300,
+    });
+    this.dnsRecords.set('irrigation.local', {
+      hostname: 'irrigation.local',
+      type: 'A',
+      value: '10.0.0.30',
+      ttl: 300,
+    });
+  }
+
+  private initProxyRoutes() {
+    // Deliberate initial misconfiguration: upstreamHost is 'greenhouse-app' instead of 'greenhouse-controller'
+    this.proxyRoutes.set('route-greenhouse', {
+      id: 'route-greenhouse',
+      hostname: 'greenhouse.solar-grove.local',
+      path: '/',
+      upstreamHost: 'greenhouse-app',
+      upstreamPort: 4000,
+      enabled: true,
+      tlsRequired: true,
+    });
+  }
+
+  private initTlsCertificates() {
+    // Deliberate initial state: MISSING certificate to trigger privacy warning
+    this.tlsCertificates.set('cert-solar-grove', {
+      id: 'cert-solar-grove',
+      domain: '*.solar-grove.local',
+      issuer: "Let's Encrypt Authority X3",
+      status: 'MISSING',
+      valid: false,
+      keyType: 'RSA 2048',
+      autoRenew: false,
     });
   }
 
@@ -219,10 +353,16 @@ export class ServiceManager {
 
     const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
     service.logs.push(`[${timestamp}] [systemd] Started ${service.description}.`);
-    service.logs.push(`[${timestamp}] [${service.name}] Server listening on port ${service.port}`);
-    service.logs.push(
-      `[${timestamp}] [${service.name}] Aquifer telemetry linked. Pressure normal at 4.2 bar.`
-    );
+    if (name === 'helio-relay') {
+      service.logs.push(`[${timestamp}] [nginx] Configuration /etc/nginx/nginx.conf syntax ok`);
+      service.logs.push(`[${timestamp}] [nginx] Worker process started (PID: ${service.pid + 1})`);
+      service.logs.push(`[${timestamp}] [nginx] Listening on 0.0.0.0:80 (HTTP) and 0.0.0.0:443 (HTTPS)`);
+    } else {
+      service.logs.push(`[${timestamp}] [${service.name}] Server listening on port ${service.port}`);
+      service.logs.push(
+        `[${timestamp}] [${service.name}] Aquifer telemetry linked. Pressure normal at 4.2 bar.`
+      );
+    }
 
     return {
       success: true,
@@ -338,15 +478,36 @@ export class ServiceManager {
     // Native Services
     for (const s of this.services.values()) {
       if (s.status === 'running' && s.pid) {
-        procs.push({
-          pid: s.pid,
-          name: s.name,
-          command: s.command,
-          status: 'RUNNING',
-          cpu: s.cpu,
-          memoryMb: s.memoryMb,
-          startedAt: Date.now() - 60000,
-        });
+        if (s.name === 'helio-relay') {
+          procs.push({
+            pid: s.pid,
+            name: 'nginx: master',
+            command: 'nginx: master process /usr/sbin/nginx -g daemon off;',
+            status: 'RUNNING',
+            cpu: 0.8,
+            memoryMb: 24.5,
+            startedAt: Date.now() - 60000,
+          });
+          procs.push({
+            pid: s.pid + 1,
+            name: 'nginx: worker',
+            command: 'nginx: worker process',
+            status: 'RUNNING',
+            cpu: 1.4,
+            memoryMb: 36.2,
+            startedAt: Date.now() - 60000,
+          });
+        } else {
+          procs.push({
+            pid: s.pid,
+            name: s.name,
+            command: s.command,
+            status: 'RUNNING',
+            cpu: s.cpu,
+            memoryMb: s.memoryMb,
+            startedAt: Date.now() - 60000,
+          });
+        }
       }
     }
 
@@ -375,14 +536,34 @@ export class ServiceManager {
     // Native Services
     for (const s of this.services.values()) {
       if (s.status === 'running' && s.pid) {
-        ports.push({
-          protocol: 'tcp',
-          address: '0.0.0.0',
-          port: s.port,
-          status: 'LISTEN',
-          processName: s.name,
-          pid: s.pid,
-        });
+        if (s.name === 'helio-relay') {
+          // Nginx listens on both 80 and 443
+          ports.push({
+            protocol: 'tcp',
+            address: '0.0.0.0',
+            port: 80,
+            status: 'LISTEN',
+            processName: 'nginx: master',
+            pid: s.pid,
+          });
+          ports.push({
+            protocol: 'tcp',
+            address: '0.0.0.0',
+            port: 443,
+            status: 'LISTEN',
+            processName: 'nginx: master',
+            pid: s.pid,
+          });
+        } else {
+          ports.push({
+            protocol: 'tcp',
+            address: '0.0.0.0',
+            port: s.port,
+            status: 'LISTEN',
+            processName: s.name,
+            pid: s.pid,
+          });
+        }
       }
     }
 
@@ -851,8 +1032,200 @@ export class ServiceManager {
   }
 
   // ==========================================
-  // --- Simulated HTTP Dispatcher ---
+  // --- Simulated HTTP Dispatcher & Endpoints ---
   // ==========================================
+
+  private handleIrrigationRequest(
+    path: string,
+    method: string
+  ): SimulatedHttpResponse {
+    const service = this.services.get('irrigation-controller');
+    if (!service || service.status !== 'running') {
+      return {
+        statusCode: 0,
+        statusText: 'ERR_CONNECTION_REFUSED',
+        headers: {},
+        body: '',
+        error: 'ERR_CONNECTION_REFUSED: Could not establish TCP connection to port 8080.',
+      };
+    }
+
+    // Endpoint: GET /health
+    if (path === '/health') {
+      const bodyObj = {
+        status: 'healthy',
+        service: 'irrigation-controller',
+        version: '1.4.2',
+        pumping: this.irrigationTelemetry.pumpingActive,
+        uptimeSec: 412,
+      };
+      return {
+        statusCode: 200,
+        statusText: 'OK',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyObj),
+        jsonData: bodyObj,
+      };
+    }
+
+    // Endpoint: POST /api/irrigation/start
+    if (method === 'POST' && (path === '/api/irrigation/start' || path === '/start')) {
+      this.irrigationTelemetry.pumpingActive = true;
+      this.irrigationTelemetry.soilMoisturePct = Math.min(
+        100,
+        this.irrigationTelemetry.soilMoisturePct + 15
+      );
+      const resObj = {
+        success: true,
+        pumping: true,
+        message: 'Aquifer valve opened. Irrigation active across connected zones.',
+        telemetry: this.irrigationTelemetry,
+      };
+      return {
+        statusCode: 200,
+        statusText: 'OK',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(resObj),
+        jsonData: resObj,
+      };
+    }
+
+    // Endpoint: POST /api/irrigation/stop
+    if (method === 'POST' && (path === '/api/irrigation/stop' || path === '/stop')) {
+      this.irrigationTelemetry.pumpingActive = false;
+      const resObj = {
+        success: true,
+        pumping: false,
+        message: 'Aquifer valve closed. Irrigation stopped.',
+        telemetry: this.irrigationTelemetry,
+      };
+      return {
+        statusCode: 200,
+        statusText: 'OK',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(resObj),
+        jsonData: resObj,
+      };
+    }
+
+    // Default GET dashboard payload
+    const dashboardState = {
+      status: 'ONLINE',
+      service: 'irrigation-controller',
+      version: '1.4.2',
+      telemetry: this.irrigationTelemetry,
+    };
+    return {
+      statusCode: 200,
+      statusText: 'OK',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dashboardState),
+      jsonData: dashboardState,
+    };
+  }
+
+  private handleGreenhouseRequest(
+    path: string,
+    method: string
+  ): SimulatedHttpResponse {
+    const ghContainer = this.findContainer('greenhouse-controller');
+
+    // Check if container is running
+    if (!ghContainer || ghContainer.status !== 'RUNNING') {
+      return {
+        statusCode: 0,
+        statusText: 'ERR_CONNECTION_REFUSED',
+        headers: {},
+        body: '',
+        error: 'ERR_CONNECTION_REFUSED: Could not connect to greenhouse-controller:4000.',
+      };
+    }
+
+    // Check if container is UNHEALTHY (Failure Scenario - Section 19 & 32)
+    if (ghContainer.health === 'UNHEALTHY') {
+      const errorPayload = {
+        error: 'Bad Gateway',
+        statusCode: 502,
+        message:
+          'Upstream database failure: Unable to establish connection to PostgreSQL at greenhouse-db:5432. Authentication failed for user "greenhouse".',
+        timestamp: new Date().toISOString(),
+      };
+      return {
+        statusCode: 502,
+        statusText: 'Bad Gateway',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(errorPayload, null, 2),
+        jsonData: errorPayload,
+        error: 'HTTP 502 Bad Gateway: Upstream service failure (PostgreSQL connection error).',
+      };
+    }
+
+    // Healthy Container Endpoints (Section 17)
+    if (path === '/health') {
+      const healthPayload = {
+        status: 'healthy',
+        database: 'connected',
+        service: 'greenhouse-controller',
+        version: '2.1.0',
+      };
+      return {
+        statusCode: 200,
+        statusText: 'OK',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(healthPayload),
+        jsonData: healthPayload,
+      };
+    }
+
+    if (path === '/api/greenhouse/state') {
+      const statePayload = {
+        status: 'ACTIVE',
+        growthOptimization: true,
+        temperature: 24.5,
+        humidity: 71,
+        soilMoisture: 82,
+        database: 'CONNECTED',
+        controller: 'HEALTHY',
+      };
+      return {
+        statusCode: 200,
+        statusText: 'OK',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(statePayload),
+        jsonData: statePayload,
+      };
+    }
+
+    if (path === '/api/greenhouse/telemetry') {
+      return {
+        statusCode: 200,
+        statusText: 'OK',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.postgresState.tables.greenhouse_telemetry),
+        jsonData: { telemetry: this.postgresState.tables.greenhouse_telemetry },
+      };
+    }
+
+    // Default Web Console Dashboard Payload
+    const consoleState = {
+      title: 'VERDANT GLASSHOUSE',
+      temperature: '24.5°C',
+      humidity: '71%',
+      soilMoisture: '82%',
+      growthOptimization: 'ACTIVE',
+      database: 'CONNECTED',
+      controller: 'HEALTHY',
+      version: '2.1.0',
+    };
+
+    return {
+      statusCode: 200,
+      statusText: 'OK',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(consoleState, null, 2),
+      jsonData: consoleState,
+    };
+  }
 
   dispatchHttp(
     url: string,
@@ -860,203 +1233,140 @@ export class ServiceManager {
   ): SimulatedHttpResponse {
     const method = options.method || 'GET';
 
-    // Parse URL
-    const cleanUrl = url.trim().replace(/^https?:\/\//, '');
+    // Parse URL & Protocol
+    const trimmed = url.trim();
+    const isHttps = trimmed.startsWith('https://');
+    const cleanUrl = trimmed.replace(/^https?:\/\//, '');
     const [hostAndPort, ...pathParts] = cleanUrl.split('/');
-    const path = `/${pathParts.join('/')}`.split('?')[0];
+    const path = `/${pathParts.join('/')}`.split('?')[0] || '/';
     const [host, portStr] = hostAndPort.split(':');
-    const port = portStr ? Number.parseInt(portStr, 10) : 80;
+    const port = portStr ? Number.parseInt(portStr, 10) : isHttps ? 443 : 80;
 
-    const isIrrigationHost =
-      host === 'irrigation.local' || host === 'localhost' || host === '127.0.0.1';
-    const isGreenhouseHost = host === 'greenhouse.local';
+    // 1. Check DNS resolution for edge gateway (Phase 4)
+    const resolvedIp = this.resolveDns(host);
+    const isRelayDomain =
+      resolvedIp === '10.0.0.10' ||
+      host.endsWith('.solar-grove.local') ||
+      host === '10.0.0.10';
 
-    // 1. Check irrigation controller (Phase 2)
-    if (isIrrigationHost && (port === 8080 || port === 80)) {
-      const service = this.services.get('irrigation-controller');
-      if (!service || service.status !== 'running') {
+    if (isRelayDomain) {
+      const relaySvc = this.services.get('helio-relay');
+      if (!relaySvc || relaySvc.status !== 'running') {
         return {
           statusCode: 0,
           statusText: 'ERR_CONNECTION_REFUSED',
           headers: {},
           body: '',
-          error: 'ERR_CONNECTION_REFUSED: Could not establish TCP connection to port 8080.',
+          error: `ERR_CONNECTION_REFUSED: Could not establish TCP connection to edge relay ${resolvedIp || host} on port ${port}.`,
         };
       }
 
-      // Endpoint: GET /health
-      if (path === '/health') {
-        const bodyObj = {
-          status: 'healthy',
-          service: 'irrigation-controller',
-          version: '1.4.2',
-          pumping: this.irrigationTelemetry.pumpingActive,
-          uptimeSec: 412,
-        };
+      // HTTP to HTTPS 301 Redirect (Section 12 & 23)
+      if (!isHttps && port === 80) {
         return {
-          statusCode: 200,
-          statusText: 'OK',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(bodyObj),
-          jsonData: bodyObj,
+          statusCode: 301,
+          statusText: 'Moved Permanently',
+          headers: {
+            Location: `https://${host}${path}`,
+            Server: 'nginx/1.24.0',
+            'Content-Type': 'text/html',
+          },
+          body: `<html><head><title>301 Moved Permanently</title></head><body><center><h1>301 Moved Permanently</h1></center><hr><center>nginx/1.24.0</center></body></html>`,
         };
       }
 
-      // Endpoint: POST /api/irrigation/start
-      if (method === 'POST' && (path === '/api/irrigation/start' || path === '/start')) {
-        this.irrigationTelemetry.pumpingActive = true;
-        this.irrigationTelemetry.soilMoisturePct = Math.min(
-          100,
-          this.irrigationTelemetry.soilMoisturePct + 15
-        );
-        const resObj = {
-          success: true,
-          pumping: true,
-          message: 'Aquifer valve opened. Irrigation active across connected zones.',
-          telemetry: this.irrigationTelemetry,
-        };
-        return {
-          statusCode: 200,
-          statusText: 'OK',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(resObj),
-          jsonData: resObj,
-        };
-      }
+      // HTTPS Traffic on 443
+      if (isHttps || port === 443) {
+        // Step A: TLS Certificate Verification
+        const cert = this.getMatchingCertificate(host);
+        if (!cert || cert.status !== 'VALID') {
+          return {
+            statusCode: 495,
+            statusText: 'SSL Certificate Error',
+            headers: {
+              Server: 'nginx/1.24.0',
+            },
+            body: `NET::ERR_CERT_COMMON_NAME_INVALID: SSL certificate missing or untrusted for domain ${host}`,
+            error: 'NET::ERR_CERT_COMMON_NAME_INVALID',
+          };
+        }
 
-      // Endpoint: POST /api/irrigation/stop
-      if (method === 'POST' && (path === '/api/irrigation/stop' || path === '/stop')) {
-        this.irrigationTelemetry.pumpingActive = false;
-        const resObj = {
-          success: true,
-          pumping: false,
-          message: 'Aquifer valve closed. Irrigation stopped.',
-          telemetry: this.irrigationTelemetry,
-        };
-        return {
-          statusCode: 200,
-          statusText: 'OK',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(resObj),
-          jsonData: resObj,
-        };
-      }
+        // Step B: Reverse Proxy Routing Table Lookup
+        const route = this.findMatchingRoute(host);
+        if (!route || !route.enabled) {
+          return {
+            statusCode: 404,
+            statusText: 'Not Found',
+            headers: { Server: 'nginx/1.24.0', 'Content-Type': 'text/html' },
+            body: `<html><head><title>404 Not Found</title></head><body><center><h1>404 Not Found</h1><p>No reverse proxy route defined for ${host}.</p></center><hr><center>nginx/1.24.0</center></body></html>`,
+            error: `404 Not Found: No matching proxy route configured for ${host}.`,
+          };
+        }
 
-      // Default GET dashboard payload
-      const dashboardState = {
-        status: 'ONLINE',
-        service: 'irrigation-controller',
-        version: '1.4.2',
-        telemetry: this.irrigationTelemetry,
-      };
-      return {
-        statusCode: 200,
-        statusText: 'OK',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dashboardState),
-        jsonData: dashboardState,
-      };
+        // Check Upstream Target
+        if (route.upstreamHost === 'greenhouse-app') {
+          // Failure Scenario 1: Bad Upstream Misconfiguration (Section 23)
+          const errorLog = `[error] 1422#1422: *1 connect() failed (111: Connection refused) while connecting to upstream, client: 10.0.0.2, server: ${host}, request: "${method} ${path} HTTP/1.1", upstream: "http://greenhouse-app:${route.upstreamPort}${path}", host: "${host}"`;
+          relaySvc.logs.push(errorLog);
+          if (relaySvc.logs.length > 50) relaySvc.logs.shift();
+
+          const badGatewayPayload = {
+            error: 'Bad Gateway',
+            statusCode: 502,
+            message: `connect() failed (111: Connection refused) while connecting to upstream http://greenhouse-app:${route.upstreamPort}`,
+            server: 'nginx/1.24.0',
+            timestamp: new Date().toISOString(),
+          };
+
+          return {
+            statusCode: 502,
+            statusText: 'Bad Gateway',
+            headers: {
+              Server: 'nginx/1.24.0',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(badGatewayPayload, null, 2),
+            jsonData: badGatewayPayload,
+            error: 'HTTP 502 Bad Gateway: Upstream connection refused (upstream greenhouse-app:4000).',
+          };
+        }
+
+        // Route to Greenhouse Controller Container
+        if (
+          route.upstreamHost === 'greenhouse-controller' ||
+          route.upstreamHost === '10.0.0.20'
+        ) {
+          const res = this.handleGreenhouseRequest(path, method);
+          res.headers = { ...res.headers, Server: 'nginx/1.24.0' };
+          return res;
+        }
+
+        // Route to Irrigation Controller
+        if (
+          route.upstreamHost === 'irrigation-controller' ||
+          route.upstreamHost === '10.0.0.30' ||
+          route.upstreamHost === 'irrigation.local'
+        ) {
+          const res = this.handleIrrigationRequest(path, method);
+          res.headers = { ...res.headers, Server: 'nginx/1.24.0' };
+          return res;
+        }
+      }
     }
 
-    // 2. Check greenhouse controller (Phase 3)
-    if (isGreenhouseHost && (port === 4000 || port === 80)) {
-      const ghContainer = this.findContainer('greenhouse-controller');
+    // 2. Direct Private Internal Resolution (Phase 2 & Phase 3 Backward Compatibility)
+    const isDirectIrrigation =
+      (host === 'irrigation.local' || host === 'localhost' || host === '127.0.0.1' || host === '10.0.0.30') &&
+      (port === 8080 || port === 80);
+    if (isDirectIrrigation) {
+      return this.handleIrrigationRequest(path, method);
+    }
 
-      // Check if container is running
-      if (!ghContainer || ghContainer.status !== 'RUNNING') {
-        return {
-          statusCode: 0,
-          statusText: 'ERR_CONNECTION_REFUSED',
-          headers: {},
-          body: '',
-          error: 'ERR_CONNECTION_REFUSED: Could not connect to greenhouse.local:4000.',
-        };
-      }
-
-      // Check if container is UNHEALTHY (Failure Scenario - Section 19 & 32)
-      if (ghContainer.health === 'UNHEALTHY') {
-        const errorPayload = {
-          error: 'Bad Gateway',
-          statusCode: 502,
-          message:
-            'Upstream database failure: Unable to establish connection to PostgreSQL at greenhouse-db:5432. Authentication failed for user "greenhouse".',
-          timestamp: new Date().toISOString(),
-        };
-        return {
-          statusCode: 502,
-          statusText: 'Bad Gateway',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(errorPayload, null, 2),
-          jsonData: errorPayload,
-          error: 'HTTP 502 Bad Gateway: Upstream service failure (PostgreSQL connection error).',
-        };
-      }
-
-      // Healthy Container Endpoints (Section 17)
-      if (path === '/health') {
-        const healthPayload = {
-          status: 'healthy',
-          database: 'connected',
-          service: 'greenhouse-controller',
-          version: '2.1.0',
-        };
-        return {
-          statusCode: 200,
-          statusText: 'OK',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(healthPayload),
-          jsonData: healthPayload,
-        };
-      }
-
-      if (path === '/api/greenhouse/state') {
-        const statePayload = {
-          status: 'ACTIVE',
-          growthOptimization: true,
-          temperature: 24.5,
-          humidity: 71,
-          soilMoisture: 82,
-          database: 'CONNECTED',
-          controller: 'HEALTHY',
-        };
-        return {
-          statusCode: 200,
-          statusText: 'OK',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(statePayload),
-          jsonData: statePayload,
-        };
-      }
-
-      if (path === '/api/greenhouse/telemetry') {
-        return {
-          statusCode: 200,
-          statusText: 'OK',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(this.postgresState.tables.greenhouse_telemetry),
-          jsonData: { telemetry: this.postgresState.tables.greenhouse_telemetry },
-        };
-      }
-
-      // Default Web Console Dashboard Payload (Section 16)
-      const consoleState = {
-        title: 'VERDANT GLASSHOUSE',
-        temperature: '24.5°C',
-        humidity: '71%',
-        soilMoisture: '82%',
-        growthOptimization: 'ACTIVE',
-        database: 'CONNECTED',
-        controller: 'HEALTHY',
-        version: '2.1.0',
-      };
-
-      return {
-        statusCode: 200,
-        statusText: 'OK',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(consoleState, null, 2),
-        jsonData: consoleState,
-      };
+    const isDirectGreenhouse =
+      (host === 'greenhouse.local' || host === '10.0.0.20') &&
+      (port === 4000 || port === 80);
+    if (isDirectGreenhouse) {
+      return this.handleGreenhouseRequest(path, method);
     }
 
     // Unresolved Domain
@@ -1067,6 +1377,218 @@ export class ServiceManager {
       body: '404 Not Found: Could not resolve hostname.',
       error: 'ERR_NAME_NOT_RESOLVED',
     };
+  }
+
+  // ==========================================
+  // --- Phase 4: Network, DNS, Proxy & TLS Accessors ---
+  // ==========================================
+
+  getHosts(): NetworkHost[] {
+    return Array.from(this.hosts.values());
+  }
+
+  getHost(ipOrName: string): NetworkHost | undefined {
+    for (const h of this.hosts.values()) {
+      if (h.ip === ipOrName || h.hostname === ipOrName) return h;
+    }
+    return undefined;
+  }
+
+  getDnsRecords(): DnsRecord[] {
+    return Array.from(this.dnsRecords.values());
+  }
+
+  resolveDns(domain: string): string | undefined {
+    const record = this.dnsRecords.get(domain);
+    if (record) return record.value;
+    // Check wildcard match
+    for (const [key, r] of this.dnsRecords.entries()) {
+      if (key.startsWith('*.') && domain.endsWith(key.slice(2))) {
+        return r.value;
+      }
+    }
+    return undefined;
+  }
+
+  addDnsRecord(record: DnsRecord): void {
+    this.dnsRecords.set(record.hostname, record);
+  }
+
+  getProxyRoutes(): ProxyRoute[] {
+    return Array.from(this.proxyRoutes.values());
+  }
+
+  getProxyRoute(id: string): ProxyRoute | undefined {
+    return this.proxyRoutes.get(id);
+  }
+
+  findMatchingRoute(hostname: string): ProxyRoute | undefined {
+    for (const r of this.proxyRoutes.values()) {
+      if (r.hostname === hostname) return r;
+    }
+    return undefined;
+  }
+
+  updateProxyRoute(id: string, updates: Partial<ProxyRoute>): boolean {
+    const route = this.proxyRoutes.get(id);
+    if (!route) return false;
+    Object.assign(route, updates);
+
+    const relaySvc = this.services.get('helio-relay');
+    if (relaySvc && relaySvc.status === 'running') {
+      const ts = new Date().toISOString().replace('T', ' ').substring(0, 19);
+      relaySvc.logs.push(
+        `[${ts}] [nginx] Reloaded configuration for upstream ${route.upstreamHost}:${route.upstreamPort}`
+      );
+    }
+    return true;
+  }
+
+  addProxyRoute(route: Omit<ProxyRoute, 'id'> & { id?: string }): ProxyRoute {
+    const id = route.id || `route-${route.hostname.replace(/[^a-z0-9]/gi, '-')}`;
+    const newRoute: ProxyRoute = {
+      ...route,
+      id,
+      enabled: route.enabled !== undefined ? route.enabled : true,
+    };
+    this.proxyRoutes.set(id, newRoute);
+
+    const relaySvc = this.services.get('helio-relay');
+    if (relaySvc && relaySvc.status === 'running') {
+      const ts = new Date().toISOString().replace('T', ' ').substring(0, 19);
+      relaySvc.logs.push(
+        `[${ts}] [nginx] Added proxy route: ${newRoute.hostname} -> http://${newRoute.upstreamHost}:${newRoute.upstreamPort}`
+      );
+    }
+    return newRoute;
+  }
+
+  getReverseProxyState(): ReverseProxyState {
+    const relaySvc = this.services.get('helio-relay');
+    const isRunning = relaySvc?.status === 'running';
+    const hasBadUpstream = Array.from(this.proxyRoutes.values()).some(
+      (r) => r.upstreamHost === 'greenhouse-app'
+    );
+
+    return {
+      serviceName: 'helio-relay',
+      status: isRunning ? 'RUNNING' : 'STOPPED',
+      listeners: [80, 443],
+      routes: Array.from(this.proxyRoutes.values()),
+      httpRedirectHttps: true,
+      activeConnections: isRunning ? 4 : 0,
+      requestsPerSecond: isRunning ? 18.2 : 0,
+      tlsTerminatedRequests: isRunning ? 920 : 0,
+      upstreamFailures: hasBadUpstream ? 1 : 0,
+    };
+  }
+
+  testNginxConfig(): { valid: boolean; output: string } {
+    for (const r of this.proxyRoutes.values()) {
+      if (!r.hostname || !r.upstreamHost || r.upstreamPort <= 0 || r.upstreamPort > 65535) {
+        return {
+          valid: false,
+          output: `nginx: [emerg] invalid upstream specification in /etc/nginx/sites-enabled/${r.hostname}.conf\nnginx: configuration file /etc/nginx/nginx.conf test failed`,
+        };
+      }
+    }
+    return {
+      valid: true,
+      output: `nginx: the configuration file /etc/nginx/nginx.conf syntax is ok\nnginx: configuration file /etc/nginx/nginx.conf test is successful`,
+    };
+  }
+
+  getCertificates(): TlsCertificate[] {
+    return Array.from(this.tlsCertificates.values());
+  }
+
+  getCertificate(idOrDomain: string): TlsCertificate | undefined {
+    for (const c of this.tlsCertificates.values()) {
+      if (c.id === idOrDomain || c.domain === idOrDomain) return c;
+    }
+    return undefined;
+  }
+
+  getMatchingCertificate(domain: string): TlsCertificate | undefined {
+    if (this.tlsCertificates.has(domain)) {
+      return this.tlsCertificates.get(domain);
+    }
+    for (const cert of this.tlsCertificates.values()) {
+      if (cert.domain.startsWith('*.')) {
+        const root = cert.domain.slice(2);
+        if (domain.endsWith(root)) {
+          return cert;
+        }
+      }
+    }
+    return undefined;
+  }
+
+  requestCertificate(domain = '*.solar-grove.local'): {
+    success: boolean;
+    certificate: TlsCertificate;
+    logs: string[];
+  } {
+    const certDomain = domain.startsWith('*.') ? domain : `*.solar-grove.local`;
+    const certId = 'cert-solar-grove';
+    const now = new Date();
+    const expiry = new Date(Date.now() + 90 * 86400000);
+
+    const certificate: TlsCertificate = {
+      id: certId,
+      domain: certDomain,
+      issuer: "Let's Encrypt Authority X3 (ACME v2)",
+      status: 'VALID',
+      valid: true,
+      issuedAt: now.toISOString().split('T')[0],
+      expiresAt: expiry.toISOString().split('T')[0],
+      fingerprint: 'SHA256:7B:44:91:DE:3C:8A:F1:69:02:11:88:AC:2B:90:5E:FE:09:A1:3D:88',
+      keyType: 'RSA 2048',
+      autoRenew: true,
+    };
+
+    this.tlsCertificates.set(certId, certificate);
+
+    const relaySvc = this.services.get('helio-relay');
+    if (relaySvc) {
+      const ts = now.toISOString().replace('T', ' ').substring(0, 19);
+      relaySvc.logs.push(`[${ts}] [certbot] ACME challenge verified for ${domain}`);
+      relaySvc.logs.push(
+        `[${ts}] [certbot] Certificate issued: /etc/letsencrypt/live/solar-grove.local/fullchain.pem`
+      );
+      relaySvc.logs.push(`[${ts}] [nginx] Reloaded configuration with updated TLS certificate`);
+    }
+
+    const logs = [
+      `Saving debug log to /var/log/letsencrypt/letsencrypt.log`,
+      `Requesting a certificate for ${domain}`,
+      `Performing the following challenges:`,
+      `http-01 challenge for ${domain}`,
+      `Using default addresses 10.0.0.10:80`,
+      `Waiting for verification...`,
+      `Cleaning up challenges`,
+      `Subscribe to the EFF mailing list (optional)`,
+      `Successfully received certificate.`,
+      `Certificate is saved at: /etc/letsencrypt/live/solar-grove.local/fullchain.pem`,
+      `Key is saved at:         /etc/letsencrypt/live/solar-grove.local/privkey.pem`,
+      `This certificate expires in 90 days.`,
+    ];
+
+    return { success: true, certificate, logs };
+  }
+
+  installCertificate(id: string): boolean {
+    const cert = this.tlsCertificates.get(id);
+    if (!cert) return false;
+    cert.status = 'VALID';
+    return true;
+  }
+
+  setCertificateStatus(id: string, status: CertificateStatus): void {
+    const cert = this.tlsCertificates.get(id);
+    if (cert) {
+      cert.status = status;
+    }
   }
 
   // ==========================================

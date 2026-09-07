@@ -7,6 +7,7 @@ import {
   Monitor,
   Move,
   Play,
+  Radio,
   Sparkles,
   Sun,
   Terminal,
@@ -349,6 +350,15 @@ export const App: React.FC = () => {
               style={{ padding: '7px 14px', fontSize: '12px' }}
             >
               <Cpu size={15} color="#48bb78" /> Build Verdant Glasshouse (150 G)
+            </button>
+
+            <button
+              type="button"
+              className="btn-solarpunk"
+              onClick={() => startPlacement('helio-relay')}
+              style={{ padding: '7px 14px', fontSize: '12px' }}
+            >
+              <Radio size={15} color="#63b3ed" /> Build Helio Relay Station (200 G)
             </button>
 
             <div style={{ width: '1px', height: '24px', background: 'rgba(214,158,46,0.3)' }} />

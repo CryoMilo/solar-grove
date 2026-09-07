@@ -63,6 +63,12 @@ export class CommandEngine {
         '                         (commands: pull, images, run, ps, stop, logs, inspect, network)',
         '  docker compose <cmd>   Multi-container orchestration (up, down, ps, logs)',
         '  env                    Display session and container environment variables',
+        '  ip [addr|route]        Inspect network interfaces and routing table',
+        '  nslookup <domain>      Query DNS name servers for domain A-records',
+        '  dig <domain>           DNS lookup utility with packet headers',
+        '  nginx [-t|-s reload]   Test and reload Nginx reverse proxy configuration',
+        '  openssl s_client ...   TLS handshake test and certificate inspection',
+        '  certbot -d <domain>    Automated ACME TLS certificate requester',
         '  curl <url>             Transfer data from or to a server / test HTTP',
         '  ping <host>            Send ICMP ECHO_REQUEST to network hosts',
         '  ls [path]              List directory contents',
@@ -594,23 +600,354 @@ export class CommandEngine {
       };
     });
 
+    // IP
+    this.register('ip', (args) => {
+      const sub = args[0] || 'addr';
+      if (sub === 'a' || sub === 'addr' || sub === 'address') {
+        const output = [
+          '1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000',
+          '    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00',
+          '    inet 127.0.0.1/8 scope host lo',
+          '       valid_lft forever preferred_lft forever',
+          '    inet6 ::1/128 scope host',
+          '       valid_lft forever preferred_lft forever',
+          '2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000',
+          '    link/ether 02:42:0a:00:00:02 brd ff:ff:ff:ff:ff:ff',
+          '    inet 10.0.0.2/24 brd 10.0.0.255 scope global eth0',
+          '       valid_lft forever preferred_lft forever',
+          '',
+        ].join('\r\n');
+        return { stdout: output, exitCode: 0, unlockedCompetency: 'networking.ip' };
+      }
+      if (sub === 'r' || sub === 'route') {
+        const output = [
+          'default via 10.0.0.1 dev eth0 proto dhcp src 10.0.0.2 metric 100',
+          '10.0.0.0/24 dev eth0 proto kernel scope link src 10.0.0.2',
+          '',
+        ].join('\r\n');
+        return { stdout: output, exitCode: 0, unlockedCompetency: 'networking.ip' };
+      }
+      return {
+        stdout: 'Usage: ip [addr|route]\r\n',
+        exitCode: 1,
+      };
+    });
+
+    // NSLOOKUP
+    this.register('nslookup', (args, sm) => {
+      const domain = args[0] || '';
+      if (!domain) {
+        return {
+          stdout: 'Usage: nslookup <domain>\r\n',
+          exitCode: 1,
+        };
+      }
+
+      const ip = sm.resolveDns ? sm.resolveDns(domain) : undefined;
+      if (!ip) {
+        return {
+          stdout: `Server:\t\t10.0.0.1\r\nAddress:\t10.0.0.1#53\r\n\r\n** server can't find ${domain}: NXDOMAIN\r\n`,
+          exitCode: 1,
+        };
+      }
+
+      return {
+        stdout: `Server:\t\t10.0.0.1\r\nAddress:\t10.0.0.1#53\r\n\r\nNon-authoritative answer:\r\nName:\t${domain}\r\nAddress: ${ip}\r\n`,
+        exitCode: 0,
+        unlockedCompetency: 'networking.dns',
+      };
+    });
+
+    // DIG
+    this.register('dig', (args, sm) => {
+      const domain = args.filter((a) => !a.startsWith('+') && !a.startsWith('@'))[0] || '';
+      if (!domain) {
+        return {
+          stdout: 'Usage: dig <domain> [@nameserver]\r\n',
+          exitCode: 1,
+        };
+      }
+
+      const ip = sm.resolveDns ? sm.resolveDns(domain) : undefined;
+      if (!ip) {
+        return {
+          stdout: `; <<>> DiG 9.18.1-1ubuntu1.3-Ubuntu <<>> ${domain}\r\n;; Got answer:\r\n;; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 31204\r\n;; QUESTION SECTION:\r\n;${domain}.\t\t\tIN\tA\r\n\r\n;; Query time: 1 msec\r\n;; SERVER: 10.0.0.1#53(10.0.0.1) (UDP)\r\n`,
+          exitCode: 1,
+        };
+      }
+
+      const output = [
+        `; <<>> DiG 9.18.1-1ubuntu1.3-Ubuntu <<>> ${domain}`,
+        ';; Got answer:',
+        ';; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 31204',
+        ';; flags: qr aa rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1',
+        '',
+        ';; QUESTION SECTION:',
+        `;${domain}.\t\t\tIN\tA`,
+        '',
+        ';; ANSWER SECTION:',
+        `${domain}.\t\t300\tIN\tA\t${ip}`,
+        '',
+        ';; Query time: 1 msec',
+        ';; SERVER: 10.0.0.1#53(10.0.0.1) (UDP)',
+        `;; WHEN: ${new Date().toUTCString()}`,
+        ';; MSG SIZE  rcvd: 56',
+        '',
+      ].join('\r\n');
+
+      return {
+        stdout: output,
+        exitCode: 0,
+        unlockedCompetency: 'networking.dns',
+      };
+    });
+
+    // NGINX
+    this.register('nginx', (args, sm) => {
+      if (args.includes('-t')) {
+        const res = sm.testNginxConfig ? sm.testNginxConfig() : { valid: true, output: '' };
+        return {
+          stdout: `${res.output}\r\n`,
+          exitCode: res.valid ? 0 : 1,
+          unlockedCompetency: 'networking.reverse-proxy',
+        };
+      }
+      if (args.includes('-s') && args.includes('reload')) {
+        return {
+          stdout: 'nginx: configuration reloaded successfully.\r\n',
+          exitCode: 0,
+          unlockedCompetency: 'networking.reverse-proxy',
+        };
+      }
+      return {
+        stdout: 'nginx version: nginx/1.24.0 (Ubuntu)\r\nUsage: nginx [-t] [-s reload]\r\n',
+        exitCode: 0,
+        unlockedCompetency: 'networking.reverse-proxy',
+      };
+    });
+
+    // OPENSSL
+    this.register('openssl', (args, sm) => {
+      if (args[0] === 's_client') {
+        let connectTarget = '';
+        let servername = '';
+        for (let i = 1; i < args.length; i++) {
+          if (args[i] === '-connect' && args[i + 1]) connectTarget = args[i + 1];
+          if (args[i] === '-servername' && args[i + 1]) servername = args[i + 1];
+        }
+
+        const domain = servername || connectTarget.split(':')[0] || 'solar-grove.local';
+        const cert = sm.getMatchingCertificate ? sm.getMatchingCertificate(domain) : undefined;
+
+        if (!cert || cert.status !== 'VALID') {
+          const lines = [
+            'CONNECTED(00000003)',
+            `depth=0 CN = ${cert?.domain || domain}`,
+            'verify error:num=20:unable to get local issuer certificate',
+            'verify return:1',
+            '---',
+            'Certificate chain',
+            ` 0 s:CN = ${cert?.domain || domain}`,
+            '   i:CN = Untrusted / Self-Signed CA',
+            '---',
+            'No client certificate CA names sent',
+            'Peer signing digest: SHA256',
+            'Server Temp Key: X25519, 253 bits',
+            '---',
+            'SSL handshake has read 1422 bytes and written 384 bytes',
+            'Verification error: certificate has expired or is untrusted',
+            '---',
+            'New, (NONE), Cipher is (NONE)',
+            'Secure Renegotiation IS NOT supported',
+            'Compression: NONE',
+            'Expansion: NONE',
+            'No ALPN negotiated',
+            'SSL-Session:',
+            '    Protocol  : TLSv1.3',
+            '    Cipher    : 0000',
+            '    Verify return code: 21 (unable to verify the first certificate)',
+            '---',
+            '',
+          ];
+          return {
+            stdout: lines.join('\r\n'),
+            exitCode: 1,
+            unlockedCompetency: 'networking.tls',
+          };
+        }
+
+        const lines = [
+          'CONNECTED(00000003)',
+          'depth=2 C = US, O = Internet Security Research Group, CN = ISRG Root X1',
+          'verify return:1',
+          "depth=1 C = US, O = Let's Encrypt, CN = R3",
+          'verify return:1',
+          `depth=0 CN = ${cert.domain}`,
+          'verify return:1',
+          '---',
+          'Certificate chain',
+          ` 0 s:CN = ${cert.domain}`,
+          "   i:C = US, O = Let's Encrypt, CN = R3",
+          '---',
+          'Server certificate',
+          '-----BEGIN CERTIFICATE-----',
+          'MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OcIwAwDQYJKoZIhvcNAQELBQAw',
+          'TzELMAkGA1UEBhMCVVMxEzARBgNVBAoTCkVsZWN0cm9uaWMgRnJvbnRpZXIgRm91',
+          'bmRhdGlvbjEZMBcGA1UEAxMQZGVtby5zb2xhcmdyb3ZlMB4XDTI2MDkwNzAwMDAw',
+          '-----END CERTIFICATE-----',
+          `subject=CN = ${cert.domain}`,
+          "issuer=C = US, O = Let's Encrypt, CN = R3",
+          '---',
+          'No client certificate CA names sent',
+          'Peer signing digest: SHA256',
+          'Peer signature type: RSA-PSS',
+          'Server Temp Key: X25519, 253 bits',
+          '---',
+          'SSL handshake has read 3824 bytes and written 432 bytes',
+          'Verification: OK',
+          '---',
+          'New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384',
+          'Server public key is 2048 bit',
+          'Secure Renegotiation IS supported',
+          'Compression: NONE',
+          'Expansion: NONE',
+          'ALPN protocol: h2',
+          'SSL-Session:',
+          '    Protocol  : TLSv1.3',
+          '    Cipher    : TLS_AES_256_GCM_SHA384',
+          '    Session-ID: 7B4491DE3C8AF169021188AC2B905EFE09A13D88',
+          '    Session-ID-ctx: ',
+          '    Master-Key: 512B4...',
+          '    PSK identity: None',
+          '    PSK identity hint: None',
+          `    Start Time: ${Math.floor(Date.now() / 1000)}`,
+          '    Timeout   : 7200 (sec)',
+          '    Verify return code: 0 (ok)',
+          '---',
+          '',
+        ];
+        return {
+          stdout: lines.join('\r\n'),
+          exitCode: 0,
+          unlockedCompetency: 'networking.tls',
+        };
+      }
+
+      return {
+        stdout:
+          'OpenSSL 3.0.2 15 Mar 2022\r\nUsage: openssl s_client -connect <host:port> [-servername <domain>]\r\n',
+        exitCode: 0,
+      };
+    });
+
+    // CERTBOT
+    this.register('certbot', (args, sm) => {
+      let domain = '*.solar-grove.local';
+      for (let i = 0; i < args.length; i++) {
+        if (args[i] === '-d' && args[i + 1]) {
+          domain = args[i + 1];
+        }
+      }
+
+      const res = sm.requestCertificate(domain);
+      return {
+        stdout: `${res.logs.join('\r\n')}\r\n`,
+        exitCode: res.success ? 0 : 1,
+        unlockedCompetency: 'networking.certificates',
+      };
+    });
+
     // CURL
     this.register('curl', (args, sm) => {
-      const url = args[args.length - 1] || '';
-      if (!url || url.startsWith('-')) {
+      let isHead = false;
+      let url = '';
+      for (const arg of args) {
+        if (arg === '-I' || arg === '--head') {
+          isHead = true;
+        } else if (!arg.startsWith('-')) {
+          url = arg;
+        }
+      }
+
+      if (!url) {
         return { stdout: "curl: try 'curl --help' for more information\r\n", exitCode: 2 };
       }
 
       if (sm.dispatchHttp) {
         const res = sm.dispatchHttp(url);
-        if (res.statusCode === 200) {
-          const headerLines = Object.entries(res.headers || {}).map(([k, v]) => `${k}: ${v}`);
+
+        // 1. HTTP 301 Redirect
+        if (res.statusCode === 301) {
+          const loc = res.headers['Location'] || '';
+          const headerLines = [
+            'HTTP/1.1 301 Moved Permanently',
+            'Server: nginx/1.24.0',
+            `Date: ${new Date().toUTCString()}`,
+            'Content-Type: text/html',
+            'Content-Length: 162',
+            `Location: ${loc}`,
+            'Connection: keep-alive',
+          ];
+          const out = isHead
+            ? headerLines.join('\r\n') + '\r\n'
+            : `${headerLines.join('\r\n')}\r\n\r\n${res.body}\r\n`;
           return {
-            stdout: `HTTP/1.1 200 OK\r\n${headerLines.join('\r\n')}\r\nDate: ${new Date().toUTCString()}\r\n\r\n${res.body}\r\n`,
+            stdout: out,
             exitCode: 0,
-            unlockedCompetency: 'networking.http',
+            unlockedCompetency: 'networking.http-redirect',
           };
         }
+
+        // 2. SSL Error (495)
+        if (res.statusCode === 495 || res.error === 'NET::ERR_CERT_COMMON_NAME_INVALID') {
+          return {
+            stdout:
+              'curl: (60) SSL certificate problem: unable to get local issuer certificate\r\nMore details here: https://curl.se/docs/sslcerts.html\r\n\r\ncurl failed to verify the certificate of the server. Untrusted or missing TLS certificate.\r\n',
+            exitCode: 60,
+            unlockedCompetency: 'networking.tls',
+          };
+        }
+
+        // 3. HTTP 502 Bad Gateway
+        if (res.statusCode === 502) {
+          const headerLines = [
+            'HTTP/1.1 502 Bad Gateway',
+            'Server: nginx/1.24.0',
+            `Date: ${new Date().toUTCString()}`,
+            'Content-Type: application/json',
+            'Connection: keep-alive',
+          ];
+          const out = isHead
+            ? headerLines.join('\r\n') + '\r\n'
+            : `${headerLines.join('\r\n')}\r\n\r\n${res.body}\r\n`;
+          return {
+            stdout: out,
+            exitCode: 0,
+            unlockedCompetency: 'networking.upstream',
+          };
+        }
+
+        // 4. HTTP 200 OK
+        if (res.statusCode === 200) {
+          const headerLines = [
+            'HTTP/1.1 200 OK',
+            ...Object.entries(res.headers || {}).map(([k, v]) => `${k}: ${v}`),
+            `Date: ${new Date().toUTCString()}`,
+          ];
+          const out = isHead
+            ? headerLines.join('\r\n') + '\r\n'
+            : `${headerLines.join('\r\n')}\r\n\r\n${res.body}\r\n`;
+          const unlockedCompetency: CompetencyId = url.includes('solar-grove.local')
+            ? 'networking.reverse-proxy'
+            : 'networking.http';
+          return {
+            stdout: out,
+            exitCode: 0,
+            unlockedCompetency,
+          };
+        }
+
+        // 5. Connection refused (0)
         if (res.statusCode === 0) {
           const hostPort = url.replace(/^https?:\/\//, '').split('/')[0];
           return {
@@ -619,9 +956,18 @@ export class CommandEngine {
             unlockedCompetency: 'networking.ports',
           };
         }
+
+        // 404 Not Found or Unresolved
+        if (res.statusCode === 404 && res.error === 'ERR_NAME_NOT_RESOLVED') {
+          return {
+            stdout: `curl: (6) Could not resolve host: ${url}\r\n`,
+            exitCode: 6,
+          };
+        }
+
         return {
-          stdout: `curl: (6) Could not resolve host: ${url}\r\n`,
-          exitCode: 6,
+          stdout: `HTTP/1.1 ${res.statusCode} ${res.statusText}\r\n\r\n${res.body}\r\n`,
+          exitCode: 0,
         };
       }
 
@@ -690,9 +1036,18 @@ export class CommandEngine {
     this.register('cat', (args) => {
       const file = args[0] || '';
       if (file.includes('hosts')) {
+        const lines = [
+          '127.0.0.1   localhost',
+          '::1         localhost ip6-localhost ip6-loopback',
+          '10.0.0.1    farm-dns.solar-grove.local',
+          '10.0.0.2    pixel-pc.solar-grove.local',
+          '10.0.0.10   relay.solar-grove.local greenhouse.solar-grove.local irrigation.solar-grove.local',
+          '10.0.0.20   greenhouse.local',
+          '10.0.0.30   irrigation.local',
+          '',
+        ];
         return {
-          stdout:
-            '127.0.0.1   localhost solargrove-node-01\r\n::1         localhost ip6-localhost ip6-loopback\r\n192.168.1.1 gateway.solargrove.internal\r\n',
+          stdout: lines.join('\r\n'),
           exitCode: 0,
           unlockedCompetency: 'networking.dns',
         };

@@ -57,6 +57,23 @@ export const BUILDINGS: Record<string, BuildingBlueprint> = {
       deployment: 'docker',
     },
   },
+  'helio-relay': {
+    id: 'helio-relay',
+    solarpunkName: '📡 Helio Relay Station',
+    actualTechnology: 'Nginx Reverse Proxy & TLS Gateway',
+    description:
+      'Central farm networking gateway providing DNS resolution, reverse proxy routing, and TLS certificate termination for all internal agricultural controllers.',
+    constructionCost: 200,
+    powerConsumption: 3,
+    softwareId: 'helio-relay',
+    requiredCompetencies: ['networking.ip', 'networking.dns', 'networking.reverse-proxy'],
+    requiredInfrastructure: {
+      serviceName: 'helio-relay',
+      expectedPort: 443,
+      runtime: 'nginx',
+      deployment: 'bare-metal',
+    },
+  },
   'sunvault-storage': {
     id: 'sunvault-storage',
     solarpunkName: '📦 Sunvault Storage',

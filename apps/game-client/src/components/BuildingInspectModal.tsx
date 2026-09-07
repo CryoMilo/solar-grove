@@ -9,6 +9,9 @@ import {
   Globe,
   Layers,
   Network,
+  Radio,
+  Route,
+  ShieldCheck,
   Terminal,
   X,
   Zap,
@@ -27,6 +30,7 @@ export const BuildingInspectModal: React.FC = () => {
   if (!building) return null;
 
   const isGlasshouse = building.type === 'verdant-glasshouse';
+  const isRelay = building.type === 'helio-relay';
 
   // 1. Irrigation Station State (Phase 2)
   const irrService = serviceManager.getService('irrigation-controller');
@@ -35,13 +39,7 @@ export const BuildingInspectModal: React.FC = () => {
   const isIrrCrashed = irrService?.status === 'failed';
   const isIrrPumping = serviceManager.isIrrigationActivelyPumping();
 
-  const irrSoftwareStatus = isIrrRunning
-    ? 'RUNNING'
-    : isIrrCrashed
-      ? 'CRASHED'
-      : irrService?.deploymentStatus || 'NOT_DEPLOYED';
-
-  // 2. Verdant Glasshouse State (Phase 3 - Section 27)
+  // 2. Verdant Glasshouse State (Phase 3)
   const ghContainer = serviceManager.findContainer('greenhouse-controller');
   const dbContainer = serviceManager.findContainer('greenhouse-db');
   const isGhRunning = ghContainer?.status === 'RUNNING';
@@ -50,11 +48,13 @@ export const BuildingInspectModal: React.FC = () => {
   const isDbRunning = dbContainer?.status === 'RUNNING';
   const isDbHealthy = isDbRunning && dbContainer?.health === 'HEALTHY';
 
-  const ghBuildingStatus = isGhHealthy
-    ? 'ONLINE'
-    : isGhUnhealthy
-      ? 'OFFLINE (DEGRADED)'
-      : 'OFFLINE';
+  // 3. Helio Relay State (Phase 4)
+  const relayService = serviceManager.getService('helio-relay');
+  const isRelayRunning = relayService?.status === 'running';
+  const isRelayCrashed = relayService?.status === 'failed';
+  const proxyState = serviceManager.getReverseProxyState();
+  const certs = serviceManager.getCertificates();
+  const validCertsCount = certs.filter((c) => c.status === 'VALID').length;
 
   const handleOpenSoftware = () => {
     onClose();
@@ -65,6 +65,18 @@ export const BuildingInspectModal: React.FC = () => {
   const handleOpenTerminal = () => {
     onClose();
     setActiveWindow('terminal');
+    togglePc(true);
+  };
+
+  const handleOpenNetwork = () => {
+    onClose();
+    setActiveWindow('network');
+    togglePc(true);
+  };
+
+  const handleOpenCerts = () => {
+    onClose();
+    setActiveWindow('certs');
     togglePc(true);
   };
 
@@ -131,7 +143,9 @@ export const BuildingInspectModal: React.FC = () => {
                 justifyContent: 'center',
               }}
             >
-              {isGlasshouse ? (
+              {isRelay ? (
+                <Radio size={20} color="#63b3ed" />
+              ) : isGlasshouse ? (
                 <Cpu size={20} color="#68d391" />
               ) : (
                 <Droplets size={20} color="#ecc94b" />
@@ -147,12 +161,18 @@ export const BuildingInspectModal: React.FC = () => {
                   letterSpacing: '0.04em',
                 }}
               >
-                {isGlasshouse ? 'VERDANT GLASSHOUSE' : 'HELIO IRRIGATION STATION'}
+                {isRelay
+                  ? 'HELIO RELAY STATION'
+                  : isGlasshouse
+                    ? 'VERDANT GLASSHOUSE'
+                    : 'HELIO IRRIGATION STATION'}
               </h2>
               <div style={{ fontSize: '11px', color: '#9ae6b4' }}>
-                {isGlasshouse
-                  ? `Controlled Growth Habitat (ID: ${building.id})`
-                  : `Deep Aquifer Solar Pumping Array (ID: ${building.id})`}
+                {isRelay
+                  ? `Edge Gateway & TLS Termination Array (ID: ${building.id})`
+                  : isGlasshouse
+                    ? `Controlled Growth Habitat (ID: ${building.id})`
+                    : `Deep Aquifer Solar Pumping Array (ID: ${building.id})`}
               </div>
             </div>
           </div>
@@ -189,7 +209,24 @@ export const BuildingInspectModal: React.FC = () => {
               PHYSICAL STATUS
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              {isGlasshouse ? (
+              {isRelay ? (
+                isRelayRunning ? (
+                  <>
+                    <CheckCircle2 size={16} color="#48bb78" />
+                    <span style={{ fontWeight: 700, color: '#48bb78' }}>ONLINE</span>
+                  </>
+                ) : isRelayCrashed ? (
+                  <>
+                    <AlertCircle size={16} color="#e53e3e" />
+                    <span style={{ fontWeight: 700, color: '#e53e3e' }}>OFFLINE (CRASHED)</span>
+                  </>
+                ) : (
+                  <>
+                    <Activity size={16} color="#a0aec0" />
+                    <span style={{ fontWeight: 700, color: '#a0aec0' }}>OFFLINE</span>
+                  </>
+                )
+              ) : isGlasshouse ? (
                 isGhHealthy ? (
                   <>
                     <CheckCircle2 size={16} color="#48bb78" />
@@ -235,13 +272,26 @@ export const BuildingInspectModal: React.FC = () => {
             }}
           >
             <div style={{ fontSize: '11px', color: '#a0aec0', marginBottom: '4px' }}>
-              {isGlasshouse ? 'REQUIRED SOFTWARE & RUNTIME' : 'SOFTWARE DAEMON'}
+              {isRelay
+                ? 'REVERSE PROXY & GATEWAY'
+                : isGlasshouse
+                  ? 'REQUIRED SOFTWARE & RUNTIME'
+                  : 'SOFTWARE DAEMON'}
             </div>
             <div style={{ fontWeight: 700, fontSize: '13px', color: '#ecc94b' }}>
-              {isGlasshouse ? 'Greenhouse Controller (Node.js 20)' : 'Irrigation Controller'}
+              {isRelay
+                ? 'Helio Relay (Nginx 1.25)'
+                : isGlasshouse
+                  ? 'Greenhouse Controller (Node.js 20)'
+                  : 'Irrigation Controller'}
             </div>
             <div style={{ fontSize: '11px', color: '#a0aec0' }}>
-              Deployment: {isGlasshouse ? 'Docker Container' : 'Bare Metal (systemd)'}
+              Deployment:{' '}
+              {isRelay
+                ? 'Bare Metal Daemon (Ports 80/443)'
+                : isGlasshouse
+                  ? 'Docker Container'
+                  : 'Bare Metal (systemd)'}
             </div>
           </div>
 
@@ -258,16 +308,22 @@ export const BuildingInspectModal: React.FC = () => {
               NETWORK ENDPOINT
             </div>
             <div style={{ fontFamily: 'monospace', fontSize: '13px', color: '#63b3ed' }}>
-              {isGlasshouse ? 'http://greenhouse.local:4000' : 'http://irrigation.local:8080'}
+              {isRelay
+                ? 'https://greenhouse.solar-grove.local'
+                : isGlasshouse
+                  ? 'http://greenhouse.local:4000'
+                  : 'http://irrigation.local:8080'}
             </div>
-            {isGlasshouse && (
-              <div style={{ fontSize: '11px', color: '#a0aec0' }}>
-                Docker Network: greenhouse-network
-              </div>
-            )}
+            <div style={{ fontSize: '11px', color: '#a0aec0' }}>
+              {isRelay
+                ? `10.0.0.10:443 (Edge Gateway)`
+                : isGlasshouse
+                  ? 'Docker Network: greenhouse-network'
+                  : 'Host: 10.0.0.30:8080'}
+            </div>
           </div>
 
-          {/* Database / Irrigation Telemetry */}
+          {/* Subsystem Telemetry */}
           <div
             style={{
               padding: '12px',
@@ -277,9 +333,30 @@ export const BuildingInspectModal: React.FC = () => {
             }}
           >
             <div style={{ fontSize: '11px', color: '#a0aec0', marginBottom: '4px' }}>
-              {isGlasshouse ? 'DATABASE INFRASTRUCTURE' : 'WATER DELIVERY'}
+              {isRelay
+                ? 'GATEWAY ROUTING & TLS'
+                : isGlasshouse
+                  ? 'DATABASE INFRASTRUCTURE'
+                  : 'WATER DELIVERY'}
             </div>
-            {isGlasshouse ? (
+            {isRelay ? (
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '13px', color: '#b794f4' }}>
+                  {proxyState.routes.length} Virtual Hosts Configured
+                </div>
+                <div
+                  style={{
+                    fontSize: '11px',
+                    color: validCertsCount > 0 ? '#68d391' : '#ecc94b',
+                    fontWeight: 600,
+                  }}
+                >
+                  {validCertsCount > 0
+                    ? `TLS Active: ${validCertsCount} Valid Cert(s)`
+                    : 'TLS Inactive / Unsecured'}
+                </div>
+              </div>
+            ) : isGlasshouse ? (
               <div>
                 <div style={{ fontWeight: 700, fontSize: '13px', color: '#b794f4' }}>
                   PostgreSQL :5432 ({dbContainer ? 'greenhouse-db' : 'greenhouse-db (stopped)'})
@@ -307,7 +384,7 @@ export const BuildingInspectModal: React.FC = () => {
             )}
           </div>
 
-          {/* Container Health / Reservoir */}
+          {/* Capacity & Production Impact */}
           <div
             style={{
               padding: '12px',
@@ -317,9 +394,17 @@ export const BuildingInspectModal: React.FC = () => {
             }}
           >
             <div style={{ fontSize: '11px', color: '#a0aec0', marginBottom: '4px' }}>
-              {isGlasshouse ? 'CONTAINER HEALTH' : 'AQUIFER RESERVOIR'}
+              {isRelay
+                ? 'LISTENERS & REDIRECT'
+                : isGlasshouse
+                  ? 'CONTAINER HEALTH'
+                  : 'AQUIFER RESERVOIR'}
             </div>
-            {isGlasshouse ? (
+            {isRelay ? (
+              <div style={{ fontSize: '12px', color: '#ecc94b', fontWeight: 600 }}>
+                Port 80 (HTTP 301) ➔ Port 443 (HTTPS TLS)
+              </div>
+            ) : isGlasshouse ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span
                   style={{
@@ -353,7 +438,7 @@ export const BuildingInspectModal: React.FC = () => {
             )}
           </div>
 
-          {/* Production Impact */}
+          {/* Impact */}
           <div
             style={{
               padding: '12px',
@@ -366,47 +451,93 @@ export const BuildingInspectModal: React.FC = () => {
               PRODUCTION IMPACT
             </div>
             <div style={{ fontWeight: 700, fontSize: '13px', color: '#48bb78' }}>
-              {isGlasshouse
-                ? isGhHealthy
-                  ? '+50% Accelerated Photosynthesis (ACTIVE)'
-                  : 'Growth Optimization: OFFLINE'
-                : '+40% Crop Growth Acceleration'}
+              {isRelay
+                ? isRelayRunning
+                  ? 'Unified Edge Ingress & SSL (ACTIVE)'
+                  : 'Ingress Offline: 502/SSL Warning'
+                : isGlasshouse
+                  ? isGhHealthy
+                    ? '+50% Accelerated Photosynthesis (ACTIVE)'
+                    : 'Growth Optimization: OFFLINE'
+                  : '+40% Crop Growth Acceleration'}
             </div>
           </div>
         </div>
 
         {/* Action Controls */}
-        <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-          <button
-            type="button"
-            className="btn-solarpunk"
-            onClick={handleOpenSoftware}
-            style={{ flex: 1, padding: '10px', fontSize: '12px', justifyContent: 'center' }}
-          >
-            <Layers size={15} color="#ecc94b" /> Software Catalog
-          </button>
+        <div style={{ display: 'flex', gap: '10px', marginTop: '10px', flexWrap: 'wrap' }}>
+          {isRelay ? (
+            <>
+              <button
+                type="button"
+                className="btn-solarpunk"
+                onClick={handleOpenNetwork}
+                style={{ flex: 1, padding: '10px', fontSize: '12px', justifyContent: 'center' }}
+              >
+                <Route size={15} color="#63b3ed" /> Network Console
+              </button>
 
-          <button
-            type="button"
-            className="btn-solarpunk"
-            onClick={handleOpenTerminal}
-            style={{ flex: 1, padding: '10px', fontSize: '12px', justifyContent: 'center' }}
-          >
-            <Terminal size={15} color="#68d391" /> Terminal Service
-          </button>
+              <button
+                type="button"
+                className="btn-solarpunk"
+                onClick={handleOpenCerts}
+                style={{ flex: 1, padding: '10px', fontSize: '12px', justifyContent: 'center' }}
+              >
+                <ShieldCheck size={15} color="#48bb78" /> Cert Manager
+              </button>
 
-          <button
-            type="button"
-            className="btn-solarpunk btn-gold"
-            onClick={() =>
-              handleOpenBrowser(
-                isGlasshouse ? 'http://greenhouse.local:4000' : 'http://irrigation.local:8080'
-              )
-            }
-            style={{ flex: 1.2, padding: '10px', fontSize: '12px', justifyContent: 'center' }}
-          >
-            <Globe size={15} /> Web Console
-          </button>
+              <button
+                type="button"
+                className="btn-solarpunk"
+                onClick={handleOpenTerminal}
+                style={{ flex: 1, padding: '10px', fontSize: '12px', justifyContent: 'center' }}
+              >
+                <Terminal size={15} color="#68d391" /> Terminal
+              </button>
+
+              <button
+                type="button"
+                className="btn-solarpunk btn-gold"
+                onClick={() => handleOpenBrowser('https://greenhouse.solar-grove.local')}
+                style={{ flex: 1.2, padding: '10px', fontSize: '12px', justifyContent: 'center' }}
+              >
+                <Globe size={15} /> HTTPS Portal
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="btn-solarpunk"
+                onClick={handleOpenSoftware}
+                style={{ flex: 1, padding: '10px', fontSize: '12px', justifyContent: 'center' }}
+              >
+                <Layers size={15} color="#ecc94b" /> Software Catalog
+              </button>
+
+              <button
+                type="button"
+                className="btn-solarpunk"
+                onClick={handleOpenTerminal}
+                style={{ flex: 1, padding: '10px', fontSize: '12px', justifyContent: 'center' }}
+              >
+                <Terminal size={15} color="#68d391" /> Terminal Service
+              </button>
+
+              <button
+                type="button"
+                className="btn-solarpunk btn-gold"
+                onClick={() =>
+                  handleOpenBrowser(
+                    isGlasshouse ? 'http://greenhouse.local:4000' : 'http://irrigation.local:8080'
+                  )
+                }
+                style={{ flex: 1.2, padding: '10px', fontSize: '12px', justifyContent: 'center' }}
+              >
+                <Globe size={15} /> Web Console
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

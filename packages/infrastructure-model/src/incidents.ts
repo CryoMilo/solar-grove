@@ -132,6 +132,44 @@ export class IncidentEngine {
           suggestedCommand: `docker logs ${serviceName}`,
         };
         break;
+
+      case 'bad-upstream':
+        incident = {
+          id,
+          type,
+          title: '502 Bad Gateway: Upstream Target Unreachable',
+          description:
+            'Nginx reverse proxy received connection refused when proxying to greenhouse-app:4000. Upstream host misconfigured.',
+          affectedBuildingId: buildingId,
+          affectedServiceName: serviceName,
+          severity: 'high',
+          resolved: false,
+          detectedAt: Date.now(),
+          productionPenaltyPercent: 20,
+          remediationHint:
+            'Check Nginx error logs with `journalctl -u helio-relay` or `nginx -t`. Update route upstreamHost to `greenhouse-controller:4000` in Network Console.',
+          suggestedCommand: 'journalctl -u helio-relay -n 20',
+        };
+        break;
+
+      case 'cert-missing':
+        incident = {
+          id,
+          type,
+          title: 'TLS Certificate Error / Privacy Warning',
+          description:
+            'Browser blocked access to https://greenhouse.solar-grove.local due to missing or untrusted TLS certificate.',
+          affectedBuildingId: buildingId,
+          affectedServiceName: serviceName,
+          severity: 'medium',
+          resolved: false,
+          detectedAt: Date.now(),
+          productionPenaltyPercent: 10,
+          remediationHint:
+            'Open Certificate Manager or use ACME automated certificate issuance to install a valid TLS certificate for *.solar-grove.local.',
+          suggestedCommand: 'openssl s_client -connect 10.0.0.10:443 -servername greenhouse.solar-grove.local',
+        };
+        break;
     }
 
     this.activeIncidents.set(id, incident);

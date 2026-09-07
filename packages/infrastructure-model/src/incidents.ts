@@ -300,4 +300,15 @@ export class IncidentEngine {
   getAllIncidents(): Incident[] {
     return Array.from(this.activeIncidents.values());
   }
+
+  // --- Phase 6 Persistence State Serialization ---
+
+  exportState(): [string, Incident][] {
+    return Array.from(this.activeIncidents.entries());
+  }
+
+  loadState(entries: [string, Incident][]): void {
+    if (!entries) return;
+    this.activeIncidents = new Map(entries);
+  }
 }

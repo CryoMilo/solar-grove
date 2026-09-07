@@ -25,6 +25,8 @@ import type {
 } from '@solar-grove/game-types';
 import { IncidentEngine, ServiceManager } from '@solar-grove/infrastructure-model';
 import { create } from 'zustand';
+import { clearSave, hasSave, loadGame, saveGame } from './persistence';
+import { soundEngine } from '../utils/audio';
 
 export type HeliosWindowId =
   | 'terminal'
@@ -58,6 +60,13 @@ interface GameStore {
   placementMode: PlacementState;
   browserUrl: string;
 
+  // Phase 6 Game Finalization state
+  freePlayMode: boolean;
+  gameCompleteModalOpen: boolean;
+  onboardingModalOpen: boolean;
+  activeIncidentModal: Incident | null;
+  unlockedHints: Record<string, number>;
+
   serviceManager: ServiceManager;
   incidentEngine: IncidentEngine;
   commandEngine: CommandEngine;
@@ -74,6 +83,16 @@ interface GameStore {
   dismissConcept: () => void;
   discoverConcept: (id: CompetencyId) => void;
   practiceConcept: (id: CompetencyId) => void;
+
+  // Phase 6 Game Finalization actions
+  setFreePlayMode: (active: boolean) => void;
+  setGameCompleteModalOpen: (open: boolean) => void;
+  setOnboardingModalOpen: (open: boolean) => void;
+  setActiveIncidentModal: (inc: Incident | null) => void;
+  unlockNextHint: (incidentId: string) => void;
+  saveGameToStorage: () => boolean;
+  loadGameFromStorage: () => boolean;
+  resetGameToDefault: () => void;
 
   startPlacement: (type: BuildingType) => void;
   cancelPlacement: () => void;
@@ -187,8 +206,20 @@ const starterCrops: CropInstance[] = [
   },
 ];
 
+const savedGame = typeof window !== 'undefined' ? loadGame() : null;
+if (savedGame) {
+  try {
+    initialServiceManager.loadState(savedGame.serviceManagerState);
+    initialIncidentEngine.loadState(savedGame.incidentEngineState);
+  } catch (err) {
+    console.warn('Failed to hydrate service/incident manager from save:', err);
+  }
+}
+
+let tickCounter = 0;
+
 export const useGameStore = create<GameStore>((set, get) => ({
-  farmState: {
+  farmState: savedGame?.farmState || {
     gold: 85, // Friendly starter balance towards Goal 1 (100 gold)
     power: 100,
     maxPower: 200,
@@ -198,17 +229,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     maxStorage: 100,
     gridWidth: 40,
     gridHeight: 40,
-    crops: starterCrops,
+    crops: JSON.parse(JSON.stringify(starterCrops)),
     inventory: {
       sunroot: 0,
       glowberry: 0,
       'verdant-grain': 0,
     },
   },
-  buildings: [],
-  objectives: JSON.parse(JSON.stringify(OBJECTIVES)),
-  knowledgeMap: initialKnowledge,
-  activeIncidents: [],
+  buildings: savedGame?.buildings || [],
+  objectives: savedGame?.objectives || JSON.parse(JSON.stringify(OBJECTIVES)),
+  knowledgeMap: savedGame?.knowledgeMap || initialKnowledge,
+  activeIncidents: savedGame?.activeIncidents || [],
   pcOpen: false,
   activeWindow: 'software',
   activeBlueprint: null,
@@ -218,9 +249,125 @@ export const useGameStore = create<GameStore>((set, get) => ({
   placementMode: { active: false, buildingType: null },
   browserUrl: 'http://irrigation.local:8080',
 
+  // Phase 6 Game Finalization state
+  freePlayMode: savedGame?.freePlayMode || false,
+  gameCompleteModalOpen: false,
+  onboardingModalOpen: !savedGame,
+  activeIncidentModal: null,
+  unlockedHints: {},
+
   serviceManager: initialServiceManager,
   incidentEngine: initialIncidentEngine,
   commandEngine: initialCommandEngine,
+
+  setFreePlayMode: (active) => set({ freePlayMode: active }),
+  setGameCompleteModalOpen: (open) => set({ gameCompleteModalOpen: open }),
+  setOnboardingModalOpen: (open) => set({ onboardingModalOpen: open }),
+  setActiveIncidentModal: (inc) => set({ activeIncidentModal: inc }),
+
+  unlockNextHint: (incidentId) => {
+    const current = get().unlockedHints[incidentId] || 0;
+    if (current < 4) {
+      set((state) => ({
+        unlockedHints: {
+          ...state.unlockedHints,
+          [incidentId]: current + 1,
+        },
+      }));
+    }
+  },
+
+  saveGameToStorage: () => {
+    const {
+      farmState,
+      buildings,
+      objectives,
+      knowledgeMap,
+      activeIncidents,
+      serviceManager,
+      incidentEngine,
+      freePlayMode,
+    } = get();
+    return saveGame({
+      farmState,
+      buildings,
+      objectives,
+      knowledgeMap,
+      activeIncidents,
+      serviceManagerState: serviceManager.exportState(),
+      incidentEngineState: incidentEngine.exportState(),
+      freePlayMode,
+    });
+  },
+
+  loadGameFromStorage: () => {
+    const saved = loadGame();
+    if (!saved) return false;
+    const sm = new ServiceManager();
+    sm.loadState(saved.serviceManagerState);
+    const ie = new IncidentEngine();
+    ie.loadState(saved.incidentEngineState);
+    const ce = new CommandEngine(sm);
+    set({
+      farmState: saved.farmState,
+      buildings: saved.buildings,
+      objectives: saved.objectives,
+      knowledgeMap: saved.knowledgeMap,
+      activeIncidents: saved.activeIncidents,
+      serviceManager: sm,
+      incidentEngine: ie,
+      commandEngine: ce,
+      freePlayMode: saved.freePlayMode ?? false,
+      gameCompleteModalOpen: false,
+    });
+    return true;
+  },
+
+  resetGameToDefault: () => {
+    clearSave();
+    const sm = new ServiceManager();
+    const ie = new IncidentEngine();
+    const ce = new CommandEngine(sm);
+    set({
+      farmState: {
+        gold: 85,
+        power: 100,
+        maxPower: 200,
+        water: 80,
+        maxWater: 200,
+        storage: 0,
+        maxStorage: 100,
+        gridWidth: 40,
+        gridHeight: 40,
+        crops: JSON.parse(JSON.stringify(starterCrops)),
+        inventory: {
+          sunroot: 0,
+          glowberry: 0,
+          'verdant-grain': 0,
+        },
+      },
+      buildings: [],
+      objectives: JSON.parse(JSON.stringify(OBJECTIVES)),
+      knowledgeMap: JSON.parse(JSON.stringify(initialKnowledge)),
+      activeIncidents: [],
+      pcOpen: false,
+      activeWindow: 'software',
+      activeBlueprint: null,
+      activeMicroLesson: null,
+      inspectingBuilding: null,
+      activeConcept: null,
+      placementMode: { active: false, buildingType: null },
+      browserUrl: 'http://irrigation.local:8080',
+      serviceManager: sm,
+      incidentEngine: ie,
+      commandEngine: ce,
+      freePlayMode: false,
+      gameCompleteModalOpen: false,
+      onboardingModalOpen: true,
+      activeIncidentModal: null,
+      unlockedHints: {},
+    });
+  },
 
   togglePc: (forced) =>
     set((state) => ({
@@ -332,6 +479,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       },
       objectives: updatedObjectives,
     });
+    soundEngine.playPlant();
     return true;
   },
 
@@ -385,6 +533,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       objectives: updatedObjectives,
     });
 
+    soundEngine.playHarvest();
     return { success: true, goldEarned: earned };
   },
 
@@ -462,6 +611,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     get().checkMilestones();
+    soundEngine.playConstruct();
+    setTimeout(() => get().saveGameToStorage(), 50);
 
     return {
       success: true,
@@ -495,6 +646,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       set({ buildings: updatedBuildings });
       get().checkMilestones();
+      soundEngine.playServiceStart();
     }
 
     return res;
@@ -621,6 +773,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       activeIncidents: incidentEngine.getActiveIncidents(),
       buildings: updatedBuildings,
     });
+    soundEngine.playIncidentAlarm();
   },
 
   resolveIncident: (id) => {
@@ -647,6 +800,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         activeIncidents: incidentEngine.getActiveIncidents(),
         buildings: updatedBuildings,
       });
+      soundEngine.playRecovery();
+      setTimeout(() => get().saveGameToStorage(), 50);
       return;
     }
 
@@ -671,6 +826,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       activeIncidents: incidentEngine.getActiveIncidents(),
       buildings: updatedBuildings,
     });
+    soundEngine.playRecovery();
+    setTimeout(() => get().saveGameToStorage(), 50);
   },
 
   runTerminalCommand: async (cmd) => {
@@ -1079,6 +1236,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (isComplete && !obj.completed) {
         objChanged = true;
         goldReward += obj.rewardGold;
+        if (obj.id === 'obj-phase-5-final' || obj.index === 32) {
+          soundEngine.playVictoryFanfare();
+          set({ gameCompleteModalOpen: true });
+        } else {
+          soundEngine.playObjectiveComplete();
+        }
         return {
           ...obj,
           requirements: reqs,
@@ -1104,6 +1267,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         },
         objectives: updatedObjectives,
       });
+      setTimeout(() => get().saveGameToStorage(), 50);
     }
   },
 
@@ -1243,5 +1407,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
 
     get().checkMilestones();
+
+    tickCounter = (tickCounter + 1) % 30;
+    if (tickCounter === 0) {
+      get().saveGameToStorage();
+    }
   },
 }));

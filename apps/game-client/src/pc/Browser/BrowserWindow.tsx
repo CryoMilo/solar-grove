@@ -436,10 +436,11 @@ export const BrowserWindow: React.FC = () => {
               </div>
             </div>
 
-            <p style={{ color: '#cbd5e0', fontSize: '13px', lineHeight: 1.6 }}>
-              The Helio Relay reverse proxy received connection refused when proxying this request to upstream server:{' '}
-              <code style={{ color: '#fc8181' }}>connect() failed (111: Connection refused)</code>.
-            </p>
+            <div style={{ color: '#cbd5e0', fontSize: '13px', lineHeight: 1.6, marginBottom: '14px' }}>
+              <strong>WHAT HAPPENED:</strong> The reverse proxy gateway could not reach the upstream service:
+              <br />
+              <code style={{ color: '#fc8181' }}>connect() failed (111: Connection refused)</code>
+            </div>
 
             <div
               style={{
@@ -447,14 +448,23 @@ export const BrowserWindow: React.FC = () => {
                 padding: '16px',
                 borderRadius: '6px',
                 border: '1px solid rgba(214,158,46,0.25)',
-                margin: '20px 0',
+                margin: '16px 0',
               }}
             >
               <div style={{ color: '#ecc94b', fontWeight: 700, fontSize: '12px', marginBottom: '8px' }}>
-                UPSTREAM ROUTE DIAGNOSTIC (Phase 4):
+                POSSIBLE CAUSES:
               </div>
-              <div style={{ fontSize: '12px', color: '#cbd5e0', lineHeight: 1.7 }}>
-                The proxy route is configured to forward to <code style={{ color: '#fc8181' }}>greenhouse-app:4000</code>. However, the Docker container is named <code style={{ color: '#68d391' }}>greenhouse-controller:4000</code>. Reconfigure the upstream host in the Network Console.
+              <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: '#cbd5e0', lineHeight: 1.6 }}>
+                <li>Upstream service is stopped or crashed</li>
+                <li>Incorrect upstream host or port configured in proxy route</li>
+                <li>Container network isolation or firewall rule preventing transit</li>
+              </ul>
+
+              <div style={{ color: '#68d391', fontWeight: 700, fontSize: '12px', marginTop: '12px', marginBottom: '4px' }}>
+                SUGGESTED INVESTIGATION:
+              </div>
+              <div style={{ fontSize: '12px', color: '#cbd5e0', lineHeight: 1.5 }}>
+                Check the proxy routing table in the Network Console and inspect reverse proxy logs with <code style={{ color: '#9ae6b4' }}>journalctl -u helio-relay</code> in the Terminal.
               </div>
             </div>
 

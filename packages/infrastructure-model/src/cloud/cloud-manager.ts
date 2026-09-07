@@ -621,4 +621,48 @@ export class CloudManager {
       },
     };
   }
+
+  // --- Phase 6 Persistence State Serialization ---
+
+  exportState(): CloudManagerState {
+    return {
+      activeProvider: this.activeProvider,
+      deploymentTarget: this.deploymentTarget,
+      accounts: Array.from(this.accounts.entries()),
+      vpcs: Array.from(this.vpcs.entries()),
+      subnets: Array.from(this.subnets.entries()),
+      computeInstances: Array.from(this.computeInstances.entries()),
+      managedDatabases: Array.from(this.managedDatabases.entries()),
+      buckets: Array.from(this.buckets.entries()),
+      networkRules: Array.from(this.networkRules.entries()),
+      migrationProgress: JSON.parse(JSON.stringify(this.migrationProgress)),
+    };
+  }
+
+  loadState(state: CloudManagerState): void {
+    if (!state) return;
+    if (state.activeProvider) this.activeProvider = state.activeProvider;
+    if (state.deploymentTarget) this.deploymentTarget = state.deploymentTarget;
+    if (state.accounts) this.accounts = new Map(state.accounts);
+    if (state.vpcs) this.vpcs = new Map(state.vpcs);
+    if (state.subnets) this.subnets = new Map(state.subnets);
+    if (state.computeInstances) this.computeInstances = new Map(state.computeInstances);
+    if (state.managedDatabases) this.managedDatabases = new Map(state.managedDatabases);
+    if (state.buckets) this.buckets = new Map(state.buckets);
+    if (state.networkRules) this.networkRules = new Map(state.networkRules);
+    if (state.migrationProgress) this.migrationProgress = JSON.parse(JSON.stringify(state.migrationProgress));
+  }
+}
+
+export interface CloudManagerState {
+  activeProvider: CloudProvider;
+  deploymentTarget: DeploymentTarget;
+  accounts: [string, CloudAccount][];
+  vpcs: [string, CloudVpc][];
+  subnets: [string, CloudSubnet][];
+  computeInstances: [string, CloudComputeInstance][];
+  managedDatabases: [string, ManagedDatabaseInstance][];
+  buckets: [string, ObjectStorageBucket][];
+  networkRules: [string, NetworkRule][];
+  migrationProgress: CloudMigrationProgress;
 }

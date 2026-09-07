@@ -28,7 +28,7 @@ import type {
   SoftwareDeploymentStatus,
   TlsCertificate,
 } from '@solar-grove/game-types';
-import { CloudCostSummary, CloudManager, ConnectivityResult } from './cloud';
+import { CloudCostSummary, CloudManager, CloudManagerState, ConnectivityResult } from './cloud';
 
 export interface ServiceDefinition {
   name: string;
@@ -1867,5 +1867,58 @@ export class ServiceManager {
   getCloudCostSummary(): CloudCostSummary {
     return this.cloudManager.calculateCosts();
   }
+
+  // --- Phase 6 Persistence State Serialization ---
+
+  exportState(): ServiceManagerState {
+    return {
+      services: Array.from(this.services.entries()),
+      containers: Array.from(this.containers.entries()),
+      remoteRegistry: Array.from(this.remoteRegistry.entries()),
+      localImages: Array.from(this.localImages.entries()),
+      networks: Array.from(this.networks.entries()),
+      hosts: Array.from(this.hosts.entries()),
+      dnsRecords: Array.from(this.dnsRecords.entries()),
+      proxyRoutes: Array.from(this.proxyRoutes.entries()),
+      tlsCertificates: Array.from(this.tlsCertificates.entries()),
+      cloudManager: this.cloudManager.exportState(),
+      nextPid: this.nextPid,
+      irrigationTelemetry: JSON.parse(JSON.stringify(this.irrigationTelemetry)),
+      postgresState: JSON.parse(JSON.stringify(this.postgresState)),
+    };
+  }
+
+  loadState(state: ServiceManagerState): void {
+    if (!state) return;
+    if (state.services) this.services = new Map(state.services);
+    if (state.containers) this.containers = new Map(state.containers);
+    if (state.remoteRegistry) this.remoteRegistry = new Map(state.remoteRegistry);
+    if (state.localImages) this.localImages = new Map(state.localImages);
+    if (state.networks) this.networks = new Map(state.networks);
+    if (state.hosts) this.hosts = new Map(state.hosts);
+    if (state.dnsRecords) this.dnsRecords = new Map(state.dnsRecords);
+    if (state.proxyRoutes) this.proxyRoutes = new Map(state.proxyRoutes);
+    if (state.tlsCertificates) this.tlsCertificates = new Map(state.tlsCertificates);
+    if (state.cloudManager) this.cloudManager.loadState(state.cloudManager);
+    if (typeof state.nextPid === 'number') this.nextPid = state.nextPid;
+    if (state.irrigationTelemetry) this.irrigationTelemetry = JSON.parse(JSON.stringify(state.irrigationTelemetry));
+    if (state.postgresState) this.postgresState = JSON.parse(JSON.stringify(state.postgresState));
+  }
+}
+
+export interface ServiceManagerState {
+  services: [string, ServiceDefinition][];
+  containers: [string, SimulatedContainer][];
+  remoteRegistry: [string, DockerImage][];
+  localImages: [string, DockerImage][];
+  networks: [string, DockerNetwork][];
+  hosts: [string, NetworkHost][];
+  dnsRecords: [string, DnsRecord][];
+  proxyRoutes: [string, ProxyRoute][];
+  tlsCertificates: [string, TlsCertificate][];
+  cloudManager: CloudManagerState;
+  nextPid: number;
+  irrigationTelemetry: IrrigationTelemetry;
+  postgresState: PostgresState;
 }
 

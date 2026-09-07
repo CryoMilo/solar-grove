@@ -4,26 +4,36 @@ import {
   Coins,
   Cpu,
   Droplets,
+  HelpCircle,
   Monitor,
   Move,
   Play,
   Radio,
+  RotateCcw,
+  Save,
+  Settings,
   Sparkles,
   Sun,
   Terminal,
+  Volume2,
+  VolumeX,
   X,
   Zap,
 } from 'lucide-react';
 import type React from 'react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BuildingInspectModal } from './components/BuildingInspectModal';
 import { ConceptDiscoveryToast } from './components/ConceptDiscoveryToast';
+import { GameCompleteModal } from './components/GameCompleteModal';
+import { IncidentDetailsModal } from './components/IncidentDetailsModal';
+import { OnboardingModal } from './components/OnboardingModal';
 import { PerfOverlay } from './components/PerfOverlay';
 import { PhaserGame } from './game/PhaserGame';
 import { BlueprintModal } from './pc/BlueprintModal/BlueprintModal';
 import { HeliosDesktop } from './pc/HeliosDesktop';
 import { MicroLessonDrawer } from './pc/MicroLesson/MicroLessonDrawer';
 import { useGameStore } from './stores/useGameStore';
+import { soundEngine } from './utils/audio';
 
 export const App: React.FC = () => {
   const farmState = useGameStore((s) => s.farmState);
@@ -31,7 +41,6 @@ export const App: React.FC = () => {
   const togglePc = useGameStore((s) => s.togglePc);
   const tick = useGameStore((s) => s.tick);
   const objectives = useGameStore((s) => s.objectives);
-  const openBlueprint = useGameStore((s) => s.openBlueprint);
   const activeBlueprint = useGameStore((s) => s.activeBlueprint);
   const closeBlueprint = useGameStore((s) => s.closeBlueprint);
   const activeMicroLesson = useGameStore((s) => s.activeMicroLesson);
@@ -43,6 +52,48 @@ export const App: React.FC = () => {
   const placementMode = useGameStore((s) => s.placementMode);
   const startPlacement = useGameStore((s) => s.startPlacement);
   const cancelPlacement = useGameStore((s) => s.cancelPlacement);
+
+  const setOnboardingModalOpen = useGameStore((s) => s.setOnboardingModalOpen);
+  const setActiveIncidentModal = useGameStore((s) => s.setActiveIncidentModal);
+  const saveGameToStorage = useGameStore((s) => s.saveGameToStorage);
+  const loadGameFromStorage = useGameStore((s) => s.loadGameFromStorage);
+  const resetGameToDefault = useGameStore((s) => s.resetGameToDefault);
+
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [devMode, setDevMode] = useState(false);
+  const [isMuted, setIsMuted] = useState(soundEngine.isMuted());
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 2400);
+  };
+
+  const handleToggleMute = () => {
+    const nextMuted = soundEngine.toggleMute();
+    setIsMuted(nextMuted);
+    showToast(nextMuted ? 'Sound Muted' : 'Sound Enabled');
+  };
+
+  const handleManualSave = () => {
+    const ok = saveGameToStorage();
+    showToast(ok ? 'Game Saved Locally! ✓' : 'Save Failed');
+    setSettingsOpen(false);
+  };
+
+  const handleManualLoad = () => {
+    const ok = loadGameFromStorage();
+    showToast(ok ? 'Game Loaded! ✓' : 'No Save Data Found');
+    setSettingsOpen(false);
+  };
+
+  const handleResetGame = () => {
+    if (window.confirm('Reset farm to starting state? All current buildings and progress will be cleared.')) {
+      resetGameToDefault();
+      showToast('Farm Reset to Beginning');
+      setSettingsOpen(false);
+    }
+  };
 
   // 1. Simulation loop (1 tick per second)
   useEffect(() => {
@@ -60,6 +111,7 @@ export const App: React.FC = () => {
         togglePc();
       } else if (e.key === 'Escape') {
         cancelPlacement();
+        setSettingsOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -145,7 +197,7 @@ export const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Active Incident Alert Banner (PRD Section 23) */}
+          {/* Active Incident Alert Banner */}
           {activeIncidents.length > 0 && (
             <div
               className="glass-panel incident-alarm-bar frame-solarpunk"
@@ -162,7 +214,9 @@ export const App: React.FC = () => {
                 backgroundColor: 'rgba(50, 15, 15, 0.95)',
                 borderColor: '#e53e3e',
                 boxShadow: '0 0 25px rgba(229, 62, 62, 0.45)',
+                cursor: 'pointer',
               }}
+              onClick={() => setActiveIncidentModal(activeIncidents[0])}
             >
               <div className="rivet rivet-tl" />
               <div className="rivet rivet-tr" />
@@ -182,15 +236,15 @@ export const App: React.FC = () => {
                   ⚠ {activeIncidents[0].title.toUpperCase()}
                 </div>
                 <div style={{ fontSize: '12px', color: '#feb2b2' }}>
-                  {activeIncidents[0].description}
+                  {activeIncidents[0].description} (Click to Investigate)
                 </div>
               </div>
               <button
                 type="button"
                 className="btn-solarpunk"
-                onClick={() => {
-                  setActiveWindow('terminal');
-                  togglePc(true);
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveIncidentModal(activeIncidents[0]);
                 }}
                 style={{
                   background: 'linear-gradient(135deg, #c53030, #9b2c2c)',
@@ -201,7 +255,7 @@ export const App: React.FC = () => {
                   fontSize: '12px',
                 }}
               >
-                <Terminal size={14} /> Troubleshoot (TAB)
+                <Terminal size={14} /> Troubleshoot
               </button>
             </div>
           )}
@@ -256,7 +310,7 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {/* Top Right: Objective Banner & PC Switch */}
+          {/* Top Right: Objective Banner, Sound, Guide, Settings & PC Switch */}
           <div
             style={{
               position: 'absolute',
@@ -264,7 +318,7 @@ export const App: React.FC = () => {
               right: '16px',
               display: 'flex',
               alignItems: 'center',
-              gap: '12px',
+              gap: '10px',
               zIndex: 100,
             }}
           >
@@ -272,12 +326,18 @@ export const App: React.FC = () => {
               <div
                 className="glass-panel frame-solarpunk"
                 style={{
-                  padding: '9px 18px',
+                  padding: '9px 16px',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '10px',
                   fontSize: '13px',
+                  cursor: 'pointer',
                 }}
+                onClick={() => {
+                  setActiveWindow('objectives');
+                  togglePc(true);
+                }}
+                title="Click to view all progression objectives"
               >
                 <div className="rivet rivet-tl" />
                 <div className="rivet rivet-tr" />
@@ -289,6 +349,126 @@ export const App: React.FC = () => {
               </div>
             )}
 
+            {/* Audio Toggle */}
+            <button
+              type="button"
+              className="btn-solarpunk"
+              onClick={handleToggleMute}
+              style={{ padding: '9px', borderRadius: '8px' }}
+              title={isMuted ? 'Unmute Sound' : 'Mute Sound'}
+            >
+              {isMuted ? <VolumeX size={16} color="#fc8181" /> : <Volume2 size={16} color="#48bb78" />}
+            </button>
+
+            {/* Onboarding Guide Button */}
+            <button
+              type="button"
+              className="btn-solarpunk"
+              onClick={() => setOnboardingModalOpen(true)}
+              style={{ padding: '8px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px' }}
+              title="Open Player Manual & Onboarding Guide"
+            >
+              <HelpCircle size={15} color="#ecc94b" /> Guide
+            </button>
+
+            {/* Settings & Save Menu */}
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className="btn-solarpunk"
+                onClick={() => setSettingsOpen(!settingsOpen)}
+                style={{ padding: '9px', borderRadius: '8px' }}
+                title="Settings & Save Menu"
+              >
+                <Settings size={16} color="#cbd5e0" />
+              </button>
+
+              {settingsOpen && (
+                <div
+                  className="glass-panel frame-solarpunk"
+                  style={{
+                    position: 'absolute',
+                    top: '42px',
+                    right: 0,
+                    width: '200px',
+                    padding: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    backgroundColor: '#0a1612',
+                    boxShadow: '0 12px 30px rgba(0,0,0,0.85)',
+                    zIndex: 300,
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="btn-solarpunk"
+                    onClick={handleManualSave}
+                    style={{ justifyContent: 'flex-start', padding: '8px 12px', fontSize: '12px' }}
+                  >
+                    <Save size={14} color="#ecc94b" /> Save Game
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-solarpunk"
+                    onClick={handleManualLoad}
+                    style={{ justifyContent: 'flex-start', padding: '8px 12px', fontSize: '12px' }}
+                  >
+                    <RotateCcw size={14} color="#63b3ed" /> Load Game
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-solarpunk"
+                    onClick={handleResetGame}
+                    style={{ justifyContent: 'flex-start', padding: '8px 12px', fontSize: '12px', color: '#fc8181' }}
+                  >
+                    <X size={14} /> New Farm (Reset)
+                  </button>
+
+                  <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '4px 0' }} />
+
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '11px',
+                      color: '#a0aec0',
+                      cursor: 'pointer',
+                      padding: '4px',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={devMode}
+                      onChange={(e) => setDevMode(e.target.checked)}
+                    />
+                    <span>Developer Mode</span>
+                  </label>
+
+                  {devMode && (
+                    <button
+                      type="button"
+                      className="btn-solarpunk"
+                      onClick={() => {
+                        triggerIncident('process-crash');
+                        setSettingsOpen(false);
+                      }}
+                      style={{
+                        padding: '6px 10px',
+                        fontSize: '11px',
+                        color: '#fc8181',
+                        borderColor: 'rgba(229,62,62,0.4)',
+                      }}
+                    >
+                      ⚡ Dev: Trigger Incident
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Pixel PC Button */}
             <button
               type="button"
               className="btn-solarpunk btn-gold"
@@ -303,7 +483,7 @@ export const App: React.FC = () => {
             </button>
           </div>
 
-          {/* Bottom Center: Quick Building Blueprints, Incident Trigger & Controls */}
+          {/* Bottom Center: Quick Building Blueprints & Controls (Prototype incident button removed) */}
           <div
             className="glass-panel frame-solarpunk"
             style={{
@@ -363,25 +543,6 @@ export const App: React.FC = () => {
 
             <div style={{ width: '1px', height: '24px', background: 'rgba(214,158,46,0.3)' }} />
 
-            {/* Incident Simulation Trigger Button */}
-            <button
-              type="button"
-              className="btn-solarpunk"
-              onClick={() => triggerIncident('process-crash')}
-              style={{
-                padding: '7px 14px',
-                fontSize: '12px',
-                background: 'rgba(197, 48, 48, 0.25)',
-                borderColor: 'rgba(229, 62, 62, 0.6)',
-                color: '#fc8181',
-              }}
-              title="Simulate service failure to test triage and recovery"
-            >
-              ⚡ Trigger Incident
-            </button>
-
-            <div style={{ width: '1px', height: '24px', background: 'rgba(214,158,46,0.3)' }} />
-
             <div
               style={{
                 display: 'flex',
@@ -409,20 +570,53 @@ export const App: React.FC = () => {
       {/* Building Inspection Modal (accessible by clicking building on farm) */}
       {!pcOpen && <BuildingInspectModal />}
 
+      {/* Incident Details Modal with Progressive Hints */}
+      <IncidentDetailsModal />
+
+      {/* First-Time Player Onboarding & Guide Modal */}
+      <OnboardingModal />
+
+      {/* Game Complete Victory Modal */}
+      <GameCompleteModal />
+
       {/* Concept Discovery Toast */}
       <ConceptDiscoveryToast />
 
-      {/* Blueprint Modal (accessible in farm mode too) */}
+      {/* Toast notification message */}
+      {toastMessage && (
+        <div
+          className="glass-panel"
+          style={{
+            position: 'absolute',
+            bottom: '80px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '8px 18px',
+            background: 'rgba(10, 24, 18, 0.95)',
+            border: '1px solid #48bb78',
+            color: '#f0fff4',
+            fontSize: '13px',
+            fontWeight: 700,
+            borderRadius: '20px',
+            zIndex: 9999,
+            boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
+          }}
+        >
+          {toastMessage}
+        </div>
+      )}
+
+      {/* Blueprint Modal */}
       {!pcOpen && activeBlueprint && (
         <BlueprintModal blueprint={activeBlueprint} onClose={closeBlueprint} />
       )}
 
-      {/* Micro-Lesson Drawer (accessible in farm mode too) */}
+      {/* Micro-Lesson Drawer */}
       {!pcOpen && activeMicroLesson && (
         <MicroLessonDrawer lesson={activeMicroLesson} onClose={closeMicroLesson} />
       )}
 
-      {/* Performance & Heat Monitor (PRD §58) */}
+      {/* Performance & Heat Monitor */}
       <PerfOverlay />
     </div>
   );

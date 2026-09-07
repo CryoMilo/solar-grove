@@ -228,25 +228,21 @@ export const HeliosDesktop: React.FC = () => {
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ color: '#fbd38d', fontFamily: 'monospace' }}>
-              Hint: {activeIncidents[0].suggestedCommand}
-            </span>
-            {activeWindow !== 'terminal' && (
-              <button
-                type="button"
-                className="btn-solarpunk"
-                onClick={() => setActiveWindow('terminal')}
-                style={{
-                  padding: '3px 10px',
-                  fontSize: '11px',
-                  background: '#c53030',
-                  color: '#fff',
-                  borderColor: '#feb2b2',
-                }}
-              >
-                Open Terminal
-              </button>
-            )}
+            <button
+              type="button"
+              className="btn-solarpunk"
+              onClick={() => useGameStore.getState().setActiveIncidentModal(activeIncidents[0])}
+              style={{
+                padding: '3px 12px',
+                fontSize: '11px',
+                background: 'linear-gradient(135deg, #c53030, #9b2c2c)',
+                color: '#fff',
+                borderColor: '#feb2b2',
+                fontWeight: 700,
+              }}
+            >
+              Investigate Incident
+            </button>
           </div>
         </div>
       )}
